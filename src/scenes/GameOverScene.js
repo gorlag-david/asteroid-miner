@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { KOFI_URL } from '../config.js';
+import { KOFI_URL, GITHUB_ISSUES_URL } from '../config.js';
 
 export class GameOverScene extends Phaser.Scene {
   constructor() {
@@ -52,6 +52,19 @@ export class GameOverScene extends Phaser.Scene {
 
     this.input.keyboard.on('keydown-SPACE', () => this.scene.start('PlayScene'));
     this.input.keyboard.on('keydown-ENTER', () => this.scene.start('PlayScene'));
+
+    // Community-driven feature request link
+    const featureLink = this.add.text(width / 2, height * 0.82, 'Want a new feature? Request it on GitHub', {
+      fontSize: '13px',
+      fontFamily: 'monospace',
+      color: '#58a6ff',
+      backgroundColor: '#1a1a2e',
+      padding: { x: 8, y: 4 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    featureLink.on('pointerover', () => featureLink.setStyle({ color: '#ffffff', backgroundColor: '#1a3a5e' }));
+    featureLink.on('pointerout', () => featureLink.setStyle({ color: '#58a6ff', backgroundColor: '#1a1a2e' }));
+    featureLink.on('pointerdown', () => window.open(GITHUB_ISSUES_URL, '_blank'));
 
     // Ko-fi tip jar button — more prominent on game over to catch post-session generosity
     const tipBtn = this.add.text(width / 2, height - 30, 'Enjoyed it? Support on Ko-fi', {

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { KOFI_URL } from '../config.js';
+import { KOFI_URL, GITHUB_ISSUES_URL } from '../config.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -21,17 +21,36 @@ export class BootScene extends Phaser.Scene {
       color: '#8888aa',
     }).setOrigin(0.5);
 
+    // Community-driven callout
+    this.add.text(width / 2, height * 0.56, 'Community-driven. You request it, we build it.', {
+      fontSize: '13px',
+      fontFamily: 'monospace',
+      color: '#55cc88',
+    }).setOrigin(0.5);
+
+    const ghLink = this.add.text(width / 2, height * 0.61, '[ Submit Feature Requests on GitHub ]', {
+      fontSize: '13px',
+      fontFamily: 'monospace',
+      color: '#58a6ff',
+      backgroundColor: '#1a1a2e',
+      padding: { x: 8, y: 4 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    ghLink.on('pointerover', () => ghLink.setStyle({ color: '#ffffff', backgroundColor: '#1a3a5e' }));
+    ghLink.on('pointerout', () => ghLink.setStyle({ color: '#58a6ff', backgroundColor: '#1a1a2e' }));
+    ghLink.on('pointerdown', () => window.open(GITHUB_ISSUES_URL, '_blank'));
+
     // Show persistent high score if one exists
     const best = parseInt(localStorage.getItem('asteroidMinerBest') || '0', 10);
     if (best > 0) {
-      this.add.text(width / 2, height * 0.58, `BEST: ${best}`, {
+      this.add.text(width / 2, height * 0.68, `BEST: ${best}`, {
         fontSize: '18px',
         fontFamily: 'monospace',
         color: '#ffcc00',
       }).setOrigin(0.5);
     }
 
-    const prompt = this.add.text(width / 2, height * 0.7, 'Press ENTER or SPACE to start', {
+    const prompt = this.add.text(width / 2, height * 0.78, 'Press ENTER or SPACE to start', {
       fontSize: '20px',
       fontFamily: 'monospace',
       color: '#0f3460',
