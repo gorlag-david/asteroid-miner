@@ -78,6 +78,19 @@ export class BootScene extends Phaser.Scene {
       if (hitObjects.length === 0) startGame();
     });
 
+    // Watch trailer link
+    const trailerLink = this.add.text(width / 2, height - 60, '[ Watch Trailer ]', {
+      fontSize: '13px',
+      fontFamily: 'monospace',
+      color: '#e94560',
+      backgroundColor: '#1a1a2e',
+      padding: { x: 8, y: 4 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    trailerLink.on('pointerover', () => trailerLink.setStyle({ color: '#ffffff', backgroundColor: '#4a1a2e' }));
+    trailerLink.on('pointerout', () => trailerLink.setStyle({ color: '#e94560', backgroundColor: '#1a1a2e' }));
+    trailerLink.on('pointerdown', () => { window.location.href = 'trailer.html'; });
+
     // Ko-fi tip jar button
     const tipBtn = this.add.text(width / 2, height - 30, 'Buy Me a Coffee on Ko-fi', {
       fontSize: '14px',
