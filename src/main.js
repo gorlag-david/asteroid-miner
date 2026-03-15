@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene.js';
+import { ShipSelectScene } from './scenes/ShipSelectScene.js';
 import { PlayScene } from './scenes/PlayScene.js';
 import { GameOverScene } from './scenes/GameOverScene.js';
 
@@ -16,7 +17,7 @@ const config = {
   input: {
     activePointers: 3,
   },
-  scene: [BootScene, PlayScene, GameOverScene],
+  scene: [BootScene, ShipSelectScene, PlayScene, GameOverScene],
   physics: {
     default: 'arcade',
     arcade: {

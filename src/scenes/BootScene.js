@@ -69,7 +69,7 @@ export class BootScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    const startGame = () => this.scene.start('PlayScene');
+    const startGame = () => this.scene.start('ShipSelectScene');
     this.input.keyboard.on('keydown-SPACE', startGame);
     this.input.keyboard.on('keydown-ENTER', startGame);
     this.input.on('pointerdown', (pointer) => {

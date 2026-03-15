@@ -7,6 +7,9 @@ export function generateAllTextures(scene) {
   if (scene.textures.exists('ship')) return; // already generated
 
   _generateShip(scene);
+  _generateShipViper(scene);
+  _generateShipHauler(scene);
+  _generateShipGunship(scene);
   _generateAsteroids(scene);
   _generateOre(scene);
   _generateFuelCell(scene);
@@ -64,6 +67,159 @@ function _generateShip(scene) {
   g.fillRect(s / 2 + 2, s - 5, 3, 3);
 
   g.generateTexture('ship', s, s);
+  g.destroy();
+}
+
+// -- Ship Viper: sleek, narrow fighter (blue/cyan) ----------------------------
+
+function _generateShipViper(scene) {
+  const s = 32;
+  const g = scene.add.graphics();
+
+  // Engine nozzle glow
+  g.fillStyle(0x22aaff, 0.4);
+  g.fillCircle(s / 2, s - 3, 5);
+
+  // Main hull — dark blue
+  g.fillStyle(0x2244aa, 1);
+  g.beginPath();
+  g.moveTo(s / 2, 0);
+  g.lineTo(s - 5, s - 3);
+  g.lineTo(s / 2, s - 7);
+  g.lineTo(5, s - 3);
+  g.closePath();
+  g.fillPath();
+
+  // Hull highlight — lighter
+  g.fillStyle(0x3366dd, 1);
+  g.beginPath();
+  g.moveTo(s / 2, 2);
+  g.lineTo(s - 8, s - 6);
+  g.lineTo(s / 2, s - 9);
+  g.lineTo(8, s - 6);
+  g.closePath();
+  g.fillPath();
+
+  // Speed stripes along hull
+  g.lineStyle(1, 0x44aaff, 0.5);
+  g.lineBetween(s / 2, 4, s / 2, s - 10);
+
+  // Cockpit canopy
+  g.fillStyle(0x88ffff, 0.9);
+  g.fillCircle(s / 2, 10, 2.5);
+
+  // Engine port (single centered)
+  g.fillStyle(0x22aaff, 0.8);
+  g.fillRect(s / 2 - 2, s - 4, 4, 3);
+
+  g.generateTexture('ship_viper', s, s);
+  g.destroy();
+}
+
+// -- Ship Hauler: wide, bulky cargo ship (green) ------------------------------
+
+function _generateShipHauler(scene) {
+  const s = 32;
+  const g = scene.add.graphics();
+
+  // Engine glow (wide, two nozzles)
+  g.fillStyle(0x44ff44, 0.3);
+  g.fillCircle(s / 2 - 5, s - 3, 5);
+  g.fillCircle(s / 2 + 5, s - 3, 5);
+
+  // Main hull — wide and sturdy
+  g.fillStyle(0x336633, 1);
+  g.beginPath();
+  g.moveTo(s / 2, 2);
+  g.lineTo(s - 2, s - 6);
+  g.lineTo(s - 2, s - 2);
+  g.lineTo(2, s - 2);
+  g.lineTo(2, s - 6);
+  g.closePath();
+  g.fillPath();
+
+  // Hull highlight
+  g.fillStyle(0x44aa44, 1);
+  g.beginPath();
+  g.moveTo(s / 2, 5);
+  g.lineTo(s - 6, s - 7);
+  g.lineTo(6, s - 7);
+  g.closePath();
+  g.fillPath();
+
+  // Cargo bay (dark rectangle in center)
+  g.fillStyle(0x224422, 0.8);
+  g.fillRect(s / 2 - 5, s / 2 - 1, 10, 8);
+
+  // Cockpit canopy
+  g.fillStyle(0x88ff88, 0.9);
+  g.fillCircle(s / 2, 10, 3);
+
+  // Cockpit glint
+  g.fillStyle(0xccffcc, 0.6);
+  g.fillCircle(s / 2 - 1, 9, 1);
+
+  // Engine ports (two wide)
+  g.fillStyle(0x44ff44, 0.8);
+  g.fillRect(s / 2 - 8, s - 4, 4, 3);
+  g.fillRect(s / 2 + 4, s - 4, 4, 3);
+
+  g.generateTexture('ship_hauler', s, s);
+  g.destroy();
+}
+
+// -- Ship Gunship: aggressive, angular (orange/red) ---------------------------
+
+function _generateShipGunship(scene) {
+  const s = 32;
+  const g = scene.add.graphics();
+
+  // Engine nozzle glow
+  g.fillStyle(0xff6600, 0.4);
+  g.fillCircle(s / 2, s - 4, 6);
+
+  // Wing cannons (drawn first, behind hull)
+  g.fillStyle(0xaa4400, 1);
+  g.fillRect(2, s / 2 - 2, 5, 12);
+  g.fillRect(s - 7, s / 2 - 2, 5, 12);
+
+  // Main hull — angular aggressive shape
+  g.fillStyle(0xcc4400, 1);
+  g.beginPath();
+  g.moveTo(s / 2, 1);
+  g.lineTo(s - 4, s / 2);
+  g.lineTo(s - 6, s - 4);
+  g.lineTo(s / 2, s - 8);
+  g.lineTo(6, s - 4);
+  g.lineTo(4, s / 2);
+  g.closePath();
+  g.fillPath();
+
+  // Hull highlight
+  g.fillStyle(0xff6633, 1);
+  g.beginPath();
+  g.moveTo(s / 2, 4);
+  g.lineTo(s - 7, s / 2 + 2);
+  g.lineTo(s / 2, s - 10);
+  g.lineTo(7, s / 2 + 2);
+  g.closePath();
+  g.fillPath();
+
+  // Cockpit canopy
+  g.fillStyle(0xffaa44, 0.9);
+  g.fillCircle(s / 2, 11, 3);
+
+  // Cannon tips (bright dots at wing ends)
+  g.fillStyle(0xffcc00, 0.9);
+  g.fillCircle(4, s / 2 - 2, 1.5);
+  g.fillCircle(s - 4, s / 2 - 2, 1.5);
+
+  // Engine ports
+  g.fillStyle(0xff8833, 0.8);
+  g.fillRect(s / 2 - 5, s - 5, 3, 3);
+  g.fillRect(s / 2 + 2, s - 5, 3, 3);
+
+  g.generateTexture('ship_gunship', s, s);
   g.destroy();
 }
 

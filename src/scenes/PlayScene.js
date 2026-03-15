@@ -1,20 +1,22 @@
 import Phaser from 'phaser';
+import { SHIPS } from './ShipSelectScene.js';
 
-const SHIP_THRUST = 300;
-const SHIP_DRAG = 50;
-const SHIP_MAX_SPEED = 400;
-const SHIP_ROTATION_SPEED = 200; // degrees per second
+// Defaults (used as fallback if no ship config passed)
+const DEFAULT_THRUST = 300;
+const DEFAULT_DRAG = 50;
+const DEFAULT_MAX_SPEED = 400;
+const DEFAULT_ROTATION_SPEED = 200;
 
 const BULLET_SPEED = 500;
 const BULLET_LIFESPAN = 1200;
-const FIRE_RATE = 200; // ms between shots
+const DEFAULT_FIRE_RATE = 200; // ms between shots
 
-const FUEL_MAX = 100;
-const FUEL_BURN_RATE = 12; // per second while thrusting
+const DEFAULT_FUEL_MAX = 100;
+const DEFAULT_FUEL_BURN_RATE = 12;
 const FUEL_PICKUP_AMOUNT = 25;
 
-const AMMO_MAX = 30;
-const AMMO_START = 15;
+const DEFAULT_AMMO_MAX = 30;
+const DEFAULT_AMMO_START = 15;
 
 const ASTEROID_SIZES = {
   large: { radius: 36, speed: 60, score: 0, splits: 2 },
@@ -65,12 +67,29 @@ export class PlayScene extends Phaser.Scene {
     super('PlayScene');
   }
 
+  init(data) {
+    // Ship config passed from ShipSelectScene (or defaults for backward compat)
+    const cfg = data.shipConfig || SHIPS[0];
+    const s = cfg.stats || {};
+    this.shipTextureKey = cfg.key || 'ship';
+    this.shipThrust = s.thrust || DEFAULT_THRUST;
+    this.shipDrag = s.drag || DEFAULT_DRAG;
+    this.shipMaxSpeed = s.maxSpeed || DEFAULT_MAX_SPEED;
+    this.shipRotationSpeed = s.rotationSpeed || DEFAULT_ROTATION_SPEED;
+    this.fuelMax = s.fuelMax || DEFAULT_FUEL_MAX;
+    this.fuelBurnRate = s.fuelBurn || DEFAULT_FUEL_BURN_RATE;
+    this.ammoMax = s.ammoMax || DEFAULT_AMMO_MAX;
+    this.ammoStart = s.ammoStart || DEFAULT_AMMO_START;
+    this.baseFireRate = s.fireRate || DEFAULT_FIRE_RATE;
+    this.oreMagnetOverride = s.oreMagnetRadius || null;
+  }
+
   create() {
     const { width, height } = this.scale;
 
     this.score = 0;
-    this.fuel = FUEL_MAX;
-    this.ammo = AMMO_START;
+    this.fuel = this.fuelMax;
+    this.ammo = this.ammoStart;
     this.lastFired = 0;
     this.elapsed = 0;
     this.spawnTimer = 0;
@@ -99,10 +118,10 @@ export class PlayScene extends Phaser.Scene {
     this.ammoPickups = this.physics.add.group();
     this.powerUps = this.physics.add.group();
 
-    // Player ship — detailed procedural sprite (generated in BootScene)
-    this.ship = this.physics.add.sprite(width / 2, height / 2, 'ship');
-    this.ship.setDrag(SHIP_DRAG);
-    this.ship.setMaxVelocity(SHIP_MAX_SPEED);
+    // Player ship — texture chosen in ShipSelectScene
+    this.ship = this.physics.add.sprite(width / 2, height / 2, this.shipTextureKey);
+    this.ship.setDrag(this.shipDrag);
+    this.ship.setMaxVelocity(this.shipMaxSpeed);
     this.ship.body.setSize(20, 20);
 
     // World wrapping is handled in update
@@ -237,12 +256,12 @@ export class PlayScene extends Phaser.Scene {
         this.ship.setAngle(targetDeg);
         this.ship.setAngularVelocity(0);
       } else {
-        this.ship.setAngularVelocity(diff > 0 ? SHIP_ROTATION_SPEED * 2 : -SHIP_ROTATION_SPEED * 2);
+        this.ship.setAngularVelocity(diff > 0 ? this.shipRotationSpeed * 2 : -this.shipRotationSpeed * 2);
       }
     } else if (left) {
-      this.ship.setAngularVelocity(-SHIP_ROTATION_SPEED);
+      this.ship.setAngularVelocity(-this.shipRotationSpeed);
     } else if (right) {
-      this.ship.setAngularVelocity(SHIP_ROTATION_SPEED);
+      this.ship.setAngularVelocity(this.shipRotationSpeed);
     } else {
       this.ship.setAngularVelocity(0);
     }
@@ -251,10 +270,10 @@ export class PlayScene extends Phaser.Scene {
     if (shouldThrust && this.fuel > 0) {
       this.physics.velocityFromRotation(
         Phaser.Math.DegToRad(this.ship.angle - 90),
-        SHIP_THRUST,
+        this.shipThrust,
         this.ship.body.acceleration,
       );
-      this.fuel = Math.max(0, this.fuel - FUEL_BURN_RATE * dt);
+      this.fuel = Math.max(0, this.fuel - this.fuelBurnRate * dt);
       if (this.fuel <= 0) {
         this._endGame();
       }
@@ -264,7 +283,7 @@ export class PlayScene extends Phaser.Scene {
       this.ship.setAcceleration(0);
     }
 
-    const fireRate = (this.activePowerUp && this.activePowerUp.type === 'rapidfire') ? FIRE_RATE / 2 : FIRE_RATE;
+    const fireRate = (this.activePowerUp && this.activePowerUp.type === 'rapidfire') ? this.baseFireRate / 2 : this.baseFireRate;
     if (fire && time > this.lastFired + fireRate && this.ammo > 0) {
       this._fireBullet(time);
     }
@@ -505,7 +524,7 @@ export class PlayScene extends Phaser.Scene {
         this._spawnAmmoPickup(ax, ay);
       }
       // Ammo recovery: destroying a small asteroid gives 1 ammo back
-      this.ammo = Math.min(AMMO_MAX, this.ammo + 1);
+      this.ammo = Math.min(this.ammoMax, this.ammo + 1);
     }
   }
 
@@ -568,7 +587,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   _collectFuel(_ship, pickup) {
-    this.fuel = Math.min(FUEL_MAX, this.fuel + FUEL_PICKUP_AMOUNT);
+    this.fuel = Math.min(this.fuelMax, this.fuel + FUEL_PICKUP_AMOUNT);
     pickup.destroy();
   }
 
@@ -585,7 +604,7 @@ export class PlayScene extends Phaser.Scene {
 
   _collectAmmo(_ship, pickup) {
     const prev = this.ammo;
-    this.ammo = Math.min(AMMO_MAX, this.ammo + AMMO_PICKUP_AMOUNT);
+    this.ammo = Math.min(this.ammoMax, this.ammo + AMMO_PICKUP_AMOUNT);
     const gained = this.ammo - prev;
     pickup.destroy();
 
@@ -889,10 +908,10 @@ export class PlayScene extends Phaser.Scene {
 
     switch (item.key) {
       case 'fuel':
-        this.fuel = Math.min(FUEL_MAX, this.fuel + 50);
+        this.fuel = Math.min(this.fuelMax, this.fuel + 50);
         break;
       case 'ammo':
-        this.ammo = Math.min(AMMO_MAX, this.ammo + 10);
+        this.ammo = Math.min(this.ammoMax, this.ammo + 10);
         break;
       case 'shield':
         this._activateStorePowerUp('shield');
@@ -940,13 +959,14 @@ export class PlayScene extends Phaser.Scene {
   _applyOreMagnetism(dt) {
     const sx = this.ship.x;
     const sy = this.ship.y;
+    const magnetRadius = this.oreMagnetOverride || ORE_MAGNET_RADIUS;
     this.ores.getChildren().forEach((ore) => {
       const dx = sx - ore.x;
       const dy = sy - ore.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < ORE_MAGNET_RADIUS && dist > 1) {
+      if (dist < magnetRadius && dist > 1) {
         // Stronger pull the closer the ore is
-        const factor = 1 - dist / ORE_MAGNET_RADIUS;
+        const factor = 1 - dist / magnetRadius;
         const pull = ORE_MAGNET_STRENGTH * factor;
         ore.body.setVelocity(
           ore.body.velocity.x + (dx / dist) * pull * dt,

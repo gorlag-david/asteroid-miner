@@ -52,7 +52,7 @@ export class GameOverScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    const restartGame = () => this.scene.start('PlayScene');
+    const restartGame = () => this.scene.start('ShipSelectScene');
     this.input.keyboard.on('keydown-SPACE', restartGame);
     this.input.keyboard.on('keydown-ENTER', restartGame);
     this.input.on('pointerdown', (pointer) => {
