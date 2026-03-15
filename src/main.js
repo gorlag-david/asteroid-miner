@@ -3,6 +3,7 @@ import { BootScene } from './scenes/BootScene.js';
 import { ShipSelectScene } from './scenes/ShipSelectScene.js';
 import { PlayScene } from './scenes/PlayScene.js';
 import { GameOverScene } from './scenes/GameOverScene.js';
+import { LeaderboardScene } from './scenes/LeaderboardScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -17,7 +18,7 @@ const config = {
   input: {
     activePointers: 3,
   },
-  scene: [BootScene, ShipSelectScene, PlayScene, GameOverScene],
+  scene: [BootScene, ShipSelectScene, PlayScene, GameOverScene, LeaderboardScene],
   physics: {
     default: 'arcade',
     arcade: {

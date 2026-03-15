@@ -78,6 +78,19 @@ export class BootScene extends Phaser.Scene {
       if (hitObjects.length === 0) startGame();
     });
 
+    // Leaderboard button
+    const lbBtn = this.add.text(width / 2, height - 90, '[ Leaderboard ]', {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      color: '#ffcc00',
+      backgroundColor: '#2a2a4a',
+      padding: { x: 12, y: 6 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    lbBtn.on('pointerover', () => lbBtn.setStyle({ color: '#ffffff', backgroundColor: '#ffcc00' }));
+    lbBtn.on('pointerout', () => lbBtn.setStyle({ color: '#ffcc00', backgroundColor: '#2a2a4a' }));
+    lbBtn.on('pointerdown', () => this.scene.start('LeaderboardScene'));
+
     // Watch trailer link
     const trailerLink = this.add.text(width / 2, height - 60, '[ Watch Trailer ]', {
       fontSize: '13px',
