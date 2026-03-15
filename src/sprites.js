@@ -10,6 +10,7 @@ export function generateAllTextures(scene) {
   _generateAsteroids(scene);
   _generateOre(scene);
   _generateFuelCell(scene);
+  _generateAmmoCrate(scene);
   _generateBullet(scene);
   _generatePowerUps(scene);
 }
@@ -246,6 +247,51 @@ function _generateFuelCell(scene) {
   g.fillRect(cx - 1, cy - 2, 1, 5);
 
   g.generateTexture('fuel_cell', s, s);
+  g.destroy();
+}
+
+// -- Ammo crate: orange/red crate with "A" label ------------------------------
+
+function _generateAmmoCrate(scene) {
+  const s = 16;
+  const g = scene.add.graphics();
+  const cx = s / 2;
+  const cy = s / 2;
+
+  // Outer glow
+  g.fillStyle(0xff6633, 0.15);
+  g.fillCircle(cx, cy, 7);
+
+  // Crate body
+  g.fillStyle(0xcc4400, 1);
+  g.fillRoundedRect(cx - 4, cy - 5, 8, 10, 2);
+
+  // Crate highlight
+  g.fillStyle(0xff6633, 1);
+  g.fillRoundedRect(cx - 3, cy - 4, 4, 8, 1);
+
+  // Cap top
+  g.fillStyle(0xff8844, 1);
+  g.fillRect(cx - 3, cy - 6, 6, 2);
+
+  // Cap bottom
+  g.fillStyle(0xff8844, 1);
+  g.fillRect(cx - 3, cy + 4, 6, 2);
+
+  // "A" label
+  g.fillStyle(0xffffff, 0.7);
+  g.beginPath();
+  g.moveTo(cx, cy - 2);
+  g.lineTo(cx + 2, cy + 2);
+  g.lineTo(cx + 1, cy + 2);
+  g.lineTo(cx + 0.5, cy + 0.5);
+  g.lineTo(cx - 0.5, cy + 0.5);
+  g.lineTo(cx - 1, cy + 2);
+  g.lineTo(cx - 2, cy + 2);
+  g.closePath();
+  g.fillPath();
+
+  g.generateTexture('ammo_crate', s, s);
   g.destroy();
 }
 

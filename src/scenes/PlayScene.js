@@ -29,6 +29,10 @@ const ORE_MAGNET_RADIUS = 80;
 const ORE_MAGNET_STRENGTH = 200; // px/s drift toward player
 const ORE_DESPAWN_WARN = 2000; // ms before expiry to start warning pulse
 const FUEL_PICKUP_CHANCE = 0.25; // chance a destroyed small asteroid drops fuel
+const AMMO_PICKUP_CHANCE = 0.20; // chance a destroyed small asteroid drops an ammo crate
+const AMMO_PICKUP_AMOUNT = 5;
+const AMMO_PICKUP_LIFESPAN = 8000;
+const AMMO_PICKUP_SPEED = 40;
 
 const POWERUP_CHANCE = 0.15; // chance a destroyed small asteroid drops a power-up
 const POWERUP_LIFESPAN = 6000;
@@ -42,6 +46,15 @@ const POWERUP_KEYS = Object.keys(POWERUP_TYPES);
 
 const COMBO_WINDOW = 2000; // ms — collect ore within this window to keep combo alive
 const COMBO_MULTIPLIERS = [1, 1.5, 2, 2.5, 3]; // combo step 0,1,2,3,4+
+
+// Store — spend score (ore) to buy items
+const STORE_ITEMS = [
+  { key: 'fuel',      label: 'FUEL +50',     cost: 50,  desc: 'Refill 50 fuel' },
+  { key: 'ammo',      label: 'AMMO +10',     cost: 40,  desc: 'Add 10 ammo' },
+  { key: 'shield',    label: 'SHIELD',       cost: 80,  desc: '6s shield' },
+  { key: 'rapidfire', label: 'RAPID FIRE',   cost: 60,  desc: '8s rapid fire' },
+  { key: 'spread',    label: 'SPREAD SHOT',  cost: 70,  desc: '8s spread shot' },
+];
 
 const INITIAL_SPAWN_INTERVAL = 3000;
 const MIN_SPAWN_INTERVAL = 800;
@@ -73,11 +86,17 @@ export class PlayScene extends Phaser.Scene {
     this.comboMultiplier = 1;
     this.lastOreTime = 0;        // timestamp of last ore collection
 
+    // Store state
+    this.storeOpen = false;
+    this.storeUI = null;
+    this.storeSelection = 0;
+
     // Groups
     this.bullets = this.physics.add.group();
     this.asteroids = this.physics.add.group();
     this.ores = this.physics.add.group();
     this.fuelPickups = this.physics.add.group();
+    this.ammoPickups = this.physics.add.group();
     this.powerUps = this.physics.add.group();
 
     // Player ship — detailed procedural sprite (generated in BootScene)
@@ -112,6 +131,16 @@ export class PlayScene extends Phaser.Scene {
     this.physics.add.overlap(this.ship, this.ores, this._collectOre, null, this);
     this.physics.add.overlap(this.ship, this.fuelPickups, this._collectFuel, null, this);
     this.physics.add.overlap(this.ship, this.powerUps, this._collectPowerUp, null, this);
+    this.physics.add.overlap(this.ship, this.ammoPickups, this._collectAmmo, null, this);
+
+    // Store key (Tab) — preventDefault to stop browser focus switching
+    this.storeKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TAB, true, true);
+    this.storeKey.on('down', () => this._toggleStore());
+
+    // Store navigation keys
+    this.storeUpKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
+    this.storeDownKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
+    this.storeEnterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
 
     // Spawn initial asteroids (3, safe distance from ship)
     for (let i = 0; i < 3; i++) {
@@ -144,10 +173,35 @@ export class PlayScene extends Phaser.Scene {
       fontStyle: 'bold',
       color: '#ffcc00',
     }).setOrigin(1, 0).setScrollFactor(0).setDepth(10).setAlpha(0);
+
+    this.storeHint = this.add.text(width / 2, height - 12, '[TAB] SHOP', {
+      fontSize: '12px',
+      fontFamily: 'monospace',
+      color: '#666688',
+    }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(10);
+
+    // Mobile shop button
+    if (this.isMobile) {
+      this.storeHint.setVisible(false);
+      const shopBtnX = width - 80;
+      const shopBtnY = height - 160;
+      this.shopBtn = this.add.circle(shopBtnX, shopBtnY, 25, 0x44aa44, 0.2)
+        .setScrollFactor(0).setDepth(20).setInteractive();
+      this.shopBtnLabel = this.add.text(shopBtnX, shopBtnY, 'SHOP', {
+        fontSize: '11px',
+        fontFamily: 'monospace',
+        color: '#44aa44',
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(21).setAlpha(0.6);
+      this.shopBtn.on('pointerdown', () => this._toggleStore());
+    }
   }
 
   update(time, delta) {
     if (this.gameOver) return;
+    if (this.storeOpen) {
+      this._handleStoreInput();
+      return;
+    }
 
     const dt = delta / 1000;
     this.elapsed += dt;
@@ -157,6 +211,7 @@ export class PlayScene extends Phaser.Scene {
     this._cleanupBullets(time);
     this._applyOreMagnetism(dt);
     this._cleanupOres();
+    this._cleanupAmmoPickups();
     this._cleanupPowerUps();
     this._tickPowerUp();
     this._tickCombo();
@@ -445,6 +500,10 @@ export class PlayScene extends Phaser.Scene {
       if (Math.random() < POWERUP_CHANCE) {
         this._spawnPowerUp(ax, ay);
       }
+      // Chance of ammo crate drop
+      if (Math.random() < AMMO_PICKUP_CHANCE) {
+        this._spawnAmmoPickup(ax, ay);
+      }
       // Ammo recovery: destroying a small asteroid gives 1 ammo back
       this.ammo = Math.min(AMMO_MAX, this.ammo + 1);
     }
@@ -511,6 +570,50 @@ export class PlayScene extends Phaser.Scene {
   _collectFuel(_ship, pickup) {
     this.fuel = Math.min(FUEL_MAX, this.fuel + FUEL_PICKUP_AMOUNT);
     pickup.destroy();
+  }
+
+  // -- Ammo pickups -----------------------------------------------------------
+
+  _spawnAmmoPickup(x, y) {
+    const pickup = this.physics.add.sprite(x, y, 'ammo_crate');
+    this.ammoPickups.add(pickup);
+    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    pickup.body.setVelocity(Math.cos(angle) * AMMO_PICKUP_SPEED, Math.sin(angle) * AMMO_PICKUP_SPEED);
+    pickup.body.setCircle(6);
+    pickup._born = this.time.now;
+  }
+
+  _collectAmmo(_ship, pickup) {
+    const prev = this.ammo;
+    this.ammo = Math.min(AMMO_MAX, this.ammo + AMMO_PICKUP_AMOUNT);
+    const gained = this.ammo - prev;
+    pickup.destroy();
+
+    // Floating text
+    const floatText = this.add.text(pickup.x, pickup.y, `+${gained} AMMO`, {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      color: '#ff8844',
+    }).setOrigin(0.5).setDepth(10);
+    this.tweens.add({
+      targets: floatText,
+      y: pickup.y - 30,
+      alpha: 0,
+      duration: 600,
+      onComplete: () => floatText.destroy(),
+    });
+  }
+
+  _cleanupAmmoPickups() {
+    const now = this.time.now;
+    this.ammoPickups.getChildren().forEach((p) => {
+      const age = now - p._born;
+      if (age > AMMO_PICKUP_LIFESPAN) {
+        p.destroy();
+      } else if (age > AMMO_PICKUP_LIFESPAN - ORE_DESPAWN_WARN) {
+        p.setAlpha(Math.sin(age * 0.008) * 0.4 + 0.5);
+      }
+    });
   }
 
   // -- Power-ups --------------------------------------------------------------
@@ -647,6 +750,191 @@ export class PlayScene extends Phaser.Scene {
     });
   }
 
+  // -- Store ----------------------------------------------------------------
+
+  _toggleStore() {
+    if (this.gameOver) return;
+    if (this.storeOpen) {
+      this._closeStore();
+    } else {
+      this._openStore();
+    }
+  }
+
+  _openStore() {
+    this.storeOpen = true;
+    this.storeSelection = 0;
+    this.physics.pause();
+
+    const { width, height } = this.scale;
+    const cx = width / 2;
+    const cy = height / 2;
+
+    // Container for all store UI elements
+    this.storeUI = [];
+
+    // Dim overlay
+    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000, 0.7)
+      .setScrollFactor(0).setDepth(50);
+    this.storeUI.push(overlay);
+
+    // Title
+    const title = this.add.text(cx, cy - 120, 'SHOP', {
+      fontSize: '28px',
+      fontFamily: 'monospace',
+      fontStyle: 'bold',
+      color: '#ffcc00',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
+    this.storeUI.push(title);
+
+    // Ore balance
+    this.storeBalanceText = this.add.text(cx, cy - 90, `ORE: ${this.score}`, {
+      fontSize: '16px',
+      fontFamily: 'monospace',
+      color: '#aaaacc',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
+    this.storeUI.push(this.storeBalanceText);
+
+    // Items
+    this.storeItemTexts = [];
+    STORE_ITEMS.forEach((item, i) => {
+      const y = cy - 50 + i * 36;
+      const canAfford = this.score >= item.cost;
+      const color = canAfford ? '#ffffff' : '#666666';
+      const itemText = this.add.text(cx, y, `${item.label}  -  ${item.cost} ore  (${item.desc})`, {
+        fontSize: '14px',
+        fontFamily: 'monospace',
+        color,
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
+      this.storeUI.push(itemText);
+      this.storeItemTexts.push(itemText);
+
+      // Make items clickable on mobile
+      itemText.setInteractive();
+      itemText.on('pointerdown', () => {
+        this.storeSelection = i;
+        this._purchaseStoreItem();
+      });
+    });
+
+    // Selection indicator
+    this.storeCursor = this.add.text(cx - 170, cy - 50, '>', {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      color: '#ffcc00',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
+    this.storeUI.push(this.storeCursor);
+
+    // Instructions
+    const instructions = this.isMobile
+      ? 'Tap item to buy  |  Tap SHOP to close'
+      : '[UP/DOWN] Select  [ENTER] Buy  [TAB] Close';
+    const instrText = this.add.text(cx, cy + 140, instructions, {
+      fontSize: '12px',
+      fontFamily: 'monospace',
+      color: '#666688',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(51);
+    this.storeUI.push(instrText);
+
+    this._updateStoreHighlight();
+  }
+
+  _closeStore() {
+    this.storeOpen = false;
+    this.physics.resume();
+    if (this.storeUI) {
+      this.storeUI.forEach((obj) => obj.destroy());
+      this.storeUI = null;
+    }
+    this.storeItemTexts = null;
+    this.storeCursor = null;
+    this.storeBalanceText = null;
+  }
+
+  _handleStoreInput() {
+    if (Phaser.Input.Keyboard.JustDown(this.storeUpKey)) {
+      this.storeSelection = Math.max(0, this.storeSelection - 1);
+      this._updateStoreHighlight();
+    } else if (Phaser.Input.Keyboard.JustDown(this.storeDownKey)) {
+      this.storeSelection = Math.min(STORE_ITEMS.length - 1, this.storeSelection + 1);
+      this._updateStoreHighlight();
+    } else if (Phaser.Input.Keyboard.JustDown(this.storeEnterKey)) {
+      this._purchaseStoreItem();
+    }
+  }
+
+  _updateStoreHighlight() {
+    if (!this.storeCursor || !this.storeItemTexts) return;
+    const { height } = this.scale;
+    const cy = height / 2;
+    this.storeCursor.setY(cy - 50 + this.storeSelection * 36);
+
+    // Update item colors based on affordability
+    STORE_ITEMS.forEach((item, i) => {
+      const canAfford = this.score >= item.cost;
+      const isSelected = i === this.storeSelection;
+      if (isSelected) {
+        this.storeItemTexts[i].setColor(canAfford ? '#ffcc00' : '#884444');
+      } else {
+        this.storeItemTexts[i].setColor(canAfford ? '#ffffff' : '#666666');
+      }
+    });
+  }
+
+  _purchaseStoreItem() {
+    const item = STORE_ITEMS[this.storeSelection];
+    if (this.score < item.cost) return; // can't afford
+
+    this.score -= item.cost;
+
+    switch (item.key) {
+      case 'fuel':
+        this.fuel = Math.min(FUEL_MAX, this.fuel + 50);
+        break;
+      case 'ammo':
+        this.ammo = Math.min(AMMO_MAX, this.ammo + 10);
+        break;
+      case 'shield':
+        this._activateStorePowerUp('shield');
+        break;
+      case 'rapidfire':
+        this._activateStorePowerUp('rapidfire');
+        break;
+      case 'spread':
+        this._activateStorePowerUp('spread');
+        break;
+    }
+
+    // Update balance display
+    if (this.storeBalanceText) {
+      this.storeBalanceText.setText(`ORE: ${this.score}`);
+    }
+    this._updateStoreHighlight();
+
+    // Flash feedback
+    if (this.storeCursor) {
+      this.storeCursor.setColor('#00ff00');
+      this.time.delayedCall(200, () => {
+        if (this.storeCursor) this.storeCursor.setColor('#ffcc00');
+      });
+    }
+  }
+
+  _activateStorePowerUp(type) {
+    const cfg = POWERUP_TYPES[type];
+    // Replace any active power-up
+    if (this.powerUpTimer) {
+      this.powerUpTimer.remove(false);
+    }
+    this.activePowerUp = { type, expiresAt: this.time.now + cfg.duration };
+    if (type === 'shield') {
+      this.ship.setTint(0x00ddff);
+    }
+    this.powerUpTimer = this.time.delayedCall(cfg.duration, () => {
+      this._deactivatePowerUp();
+    });
+  }
+
   // -- Ore magnetism --------------------------------------------------------
 
   _applyOreMagnetism(dt) {
@@ -712,6 +1000,7 @@ export class PlayScene extends Phaser.Scene {
     this.asteroids.getChildren().forEach(wrap);
     this.ores.getChildren().forEach(wrap);
     this.fuelPickups.getChildren().forEach(wrap);
+    this.ammoPickups.getChildren().forEach(wrap);
     this.powerUps.getChildren().forEach(wrap);
   }
 
