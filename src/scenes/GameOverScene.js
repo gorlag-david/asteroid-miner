@@ -7,21 +7,32 @@ export class GameOverScene extends Phaser.Scene {
 
   init(data) {
     this.finalScore = data.score || 0;
+    this.bestScore = data.best || 0;
+    this.isNewBest = data.isNewBest || false;
   }
 
   create() {
     const { width, height } = this.scale;
 
-    this.add.text(width / 2, height / 3, 'GAME OVER', {
+    this.add.text(width / 2, height / 4, 'GAME OVER', {
       fontSize: '48px',
       fontFamily: 'monospace',
       color: '#e94560',
     }).setOrigin(0.5);
 
-    this.add.text(width / 2, height / 2, `ORE COLLECTED: ${this.finalScore}`, {
+    this.add.text(width / 2, height * 0.42, `ORE COLLECTED: ${this.finalScore}`, {
       fontSize: '24px',
       fontFamily: 'monospace',
       color: '#ffcc00',
+    }).setOrigin(0.5);
+
+    // High score display
+    const bestText = this.isNewBest ? 'NEW BEST!' : `BEST: ${this.bestScore}`;
+    const bestColor = this.isNewBest ? '#00ff88' : '#8888aa';
+    this.add.text(width / 2, height * 0.52, bestText, {
+      fontSize: '20px',
+      fontFamily: 'monospace',
+      color: bestColor,
     }).setOrigin(0.5);
 
     const prompt = this.add.text(width / 2, height * 0.7, 'Press ENTER or SPACE to retry', {

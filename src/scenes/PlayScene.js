@@ -46,6 +46,7 @@ export class PlayScene extends Phaser.Scene {
     this.elapsed = 0;
     this.spawnTimer = 0;
     this.gameOver = false;
+    this.invincible = true;
 
     // Groups
     this.bullets = this.physics.add.group();
@@ -77,10 +78,17 @@ export class PlayScene extends Phaser.Scene {
     this.physics.add.overlap(this.ship, this.ores, this._collectOre, null, this);
     this.physics.add.overlap(this.ship, this.fuelPickups, this._collectFuel, null, this);
 
-    // Spawn initial asteroids
-    for (let i = 0; i < 4; i++) {
-      this._spawnAsteroid('large');
+    // Spawn initial asteroids (3, safe distance from ship)
+    for (let i = 0; i < 3; i++) {
+      this._spawnAsteroid('large', undefined, undefined, true);
     }
+
+    // Invincibility wears off after 2 seconds
+    this.ship.setAlpha(0.5);
+    this.time.delayedCall(2000, () => {
+      this.invincible = false;
+      this.ship.setAlpha(1);
+    });
 
     // HUD
     this.hudText = this.add.text(12, 12, '', {
@@ -130,6 +138,8 @@ export class PlayScene extends Phaser.Scene {
       if (this.fuel <= 0) {
         this._endGame();
       }
+      // Thrust trail
+      this._emitThrustParticle();
     } else {
       this.ship.setAcceleration(0);
     }
@@ -172,7 +182,7 @@ export class PlayScene extends Phaser.Scene {
     }
   }
 
-  _spawnAsteroid(size, x, y) {
+  _spawnAsteroid(size, x, y, safeSpawn = false) {
     const { width, height } = this.scale;
     const cfg = ASTEROID_SIZES[size];
 
@@ -192,7 +202,15 @@ export class PlayScene extends Phaser.Scene {
     this.physics.add.existing(asteroid);
     this.asteroids.add(asteroid);
 
-    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    let angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    // If safeSpawn, aim away from the center so asteroids don't drift toward the player
+    if (safeSpawn) {
+      const cx = width / 2;
+      const cy = height / 2;
+      const awayAngle = Math.atan2(y - cy, x - cx);
+      // Bias toward away direction (+/- 60 degrees)
+      angle = awayAngle + Phaser.Math.FloatBetween(-Math.PI / 3, Math.PI / 3);
+    }
     const speed = cfg.speed + Phaser.Math.FloatBetween(-20, 20);
     asteroid.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
     asteroid.body.setCircle(cfg.radius);
@@ -202,6 +220,7 @@ export class PlayScene extends Phaser.Scene {
   // -- Collisions -----------------------------------------------------------
 
   _hitAsteroid(_ship, _asteroid) {
+    if (this.invincible) return;
     this._endGame();
   }
 
@@ -213,6 +232,9 @@ export class PlayScene extends Phaser.Scene {
 
     bullet.destroy();
     asteroid.destroy();
+
+    // Camera shake on destruction
+    this.cameras.main.shake(100, 0.01);
 
     if (cfg.splits > 0) {
       const nextSize = size === 'large' ? 'medium' : 'small';
@@ -253,6 +275,19 @@ export class PlayScene extends Phaser.Scene {
 
   _collectOre(_ship, ore) {
     this.score += ORE_SCORE;
+    // Floating score text
+    const floatText = this.add.text(ore.x, ore.y, `+${ORE_SCORE}`, {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      color: '#ffcc00',
+    }).setOrigin(0.5).setDepth(10);
+    this.tweens.add({
+      targets: floatText,
+      y: ore.y - 30,
+      alpha: 0,
+      duration: 600,
+      onComplete: () => floatText.destroy(),
+    });
     ore.destroy();
   }
 
@@ -306,6 +341,8 @@ export class PlayScene extends Phaser.Scene {
     this.hudText.setText(
       `ORE: ${this.score}  |  FUEL: ${fuelBar}  |  AMMO: ${this.ammo}`,
     );
+    // Flash fuel red when low
+    this.hudText.setColor(this.fuel < 20 ? '#ff4444' : '#aaaacc');
   }
 
   // -- Game Over ------------------------------------------------------------
@@ -313,14 +350,40 @@ export class PlayScene extends Phaser.Scene {
   _endGame() {
     if (this.gameOver) return;
     this.gameOver = true;
+    this.cameras.main.shake(200, 0.03);
     this.ship.setTint(0xff0000);
     this.ship.setAcceleration(0);
     this.ship.setVelocity(0);
     this.ship.setAngularVelocity(0);
     this.physics.pause();
 
+    // Check and save high score
+    const prevBest = parseInt(localStorage.getItem('asteroidMinerBest') || '0', 10);
+    const isNewBest = this.score > prevBest;
+    if (isNewBest) {
+      localStorage.setItem('asteroidMinerBest', String(this.score));
+    }
+
     this.time.delayedCall(1000, () => {
-      this.scene.start('GameOverScene', { score: this.score });
+      this.scene.start('GameOverScene', { score: this.score, best: Math.max(this.score, prevBest), isNewBest });
+    });
+  }
+
+  // -- Effects --------------------------------------------------------------
+
+  _emitThrustParticle() {
+    const angle = Phaser.Math.DegToRad(this.ship.angle - 90);
+    // Spawn behind the ship (opposite of thrust direction)
+    const x = this.ship.x - Math.cos(angle) * 16;
+    const y = this.ship.y - Math.sin(angle) * 16;
+    const particle = this.add.circle(x, y, 2, 0xff6633).setDepth(0);
+    this.tweens.add({
+      targets: particle,
+      alpha: 0,
+      scaleX: 0.1,
+      scaleY: 0.1,
+      duration: 300,
+      onComplete: () => particle.destroy(),
     });
   }
 

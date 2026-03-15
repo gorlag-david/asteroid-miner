@@ -20,6 +20,16 @@ export class BootScene extends Phaser.Scene {
       color: '#8888aa',
     }).setOrigin(0.5);
 
+    // Show persistent high score if one exists
+    const best = parseInt(localStorage.getItem('asteroidMinerBest') || '0', 10);
+    if (best > 0) {
+      this.add.text(width / 2, height * 0.58, `BEST: ${best}`, {
+        fontSize: '18px',
+        fontFamily: 'monospace',
+        color: '#ffcc00',
+      }).setOrigin(0.5);
+    }
+
     const prompt = this.add.text(width / 2, height * 0.7, 'Press ENTER or SPACE to start', {
       fontSize: '20px',
       fontFamily: 'monospace',
