@@ -260,6 +260,11 @@ export class PlayScene extends Phaser.Scene {
       const ax = asteroid.x;
       const ay = asteroid.y;
       asteroid.destroy();
+
+      // VFX: asteroid destruction particles (shield hit)
+      const color = size === 'large' ? 0x555577 : size === 'medium' ? 0x666688 : 0x777799;
+      this._emitDestructionParticles(ax, ay, color, Phaser.Math.Between(4, 8));
+
       this.cameras.main.shake(80, 0.008);
       if (cfg.splits > 0) {
         const nextSize = size === 'large' ? 'medium' : 'small';
@@ -279,9 +284,19 @@ export class PlayScene extends Phaser.Scene {
     const cfg = ASTEROID_SIZES[size];
     const ax = asteroid.x;
     const ay = asteroid.y;
+    const bx = bullet.x;
+    const by = bullet.y;
 
     bullet.destroy();
     asteroid.destroy();
+
+    // VFX: bullet impact spark at hit location
+    this._emitBulletImpact(bx, by);
+
+    // VFX: asteroid destruction particles
+    const color = size === 'large' ? 0x555577 : size === 'medium' ? 0x666688 : 0x777799;
+    const particleCount = Phaser.Math.Between(4, 8);
+    this._emitDestructionParticles(ax, ay, color, particleCount);
 
     // Camera shake on destruction
     this.cameras.main.shake(100, 0.01);
@@ -513,6 +528,10 @@ export class PlayScene extends Phaser.Scene {
     if (this.gameOver) return;
     this.gameOver = true;
     this.cameras.main.shake(200, 0.03);
+
+    // VFX: ship death particles (red burst)
+    this._emitDestructionParticles(this.ship.x, this.ship.y, 0xff3333, 8);
+
     this.ship.setTint(0xff0000);
     this.ship.setAcceleration(0);
     this.ship.setVelocity(0);
@@ -532,6 +551,53 @@ export class PlayScene extends Phaser.Scene {
   }
 
   // -- Effects --------------------------------------------------------------
+
+  _emitDestructionParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const speed = Phaser.Math.FloatBetween(60, 160);
+      const radius = Phaser.Math.FloatBetween(2, 4);
+      const p = this.add.circle(x, y, radius, color).setDepth(5);
+      this.tweens.add({
+        targets: p,
+        x: x + Math.cos(angle) * speed * 0.3,
+        y: y + Math.sin(angle) * speed * 0.3,
+        alpha: 0,
+        scaleX: 0.1,
+        scaleY: 0.1,
+        duration: 300,
+        onComplete: () => p.destroy(),
+      });
+    }
+  }
+
+  _emitBulletImpact(x, y) {
+    const flash = this.add.circle(x, y, 8, 0xffffff).setDepth(5).setAlpha(0.9);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scaleX: 2,
+      scaleY: 2,
+      duration: 150,
+      onComplete: () => flash.destroy(),
+    });
+    for (let i = 0; i < 3; i++) {
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const spark = this.add.circle(
+        x + Math.cos(angle) * 4,
+        y + Math.sin(angle) * 4,
+        1.5, 0xffffaa,
+      ).setDepth(5);
+      this.tweens.add({
+        targets: spark,
+        x: x + Math.cos(angle) * 20,
+        y: y + Math.sin(angle) * 20,
+        alpha: 0,
+        duration: 200,
+        onComplete: () => spark.destroy(),
+      });
+    }
+  }
 
   _emitThrustParticle() {
     const angle = Phaser.Math.DegToRad(this.ship.angle - 90);
