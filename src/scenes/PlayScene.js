@@ -27,6 +27,16 @@ const ORE_LIFESPAN = 5000;
 const ORE_SCORE = 10;
 const FUEL_PICKUP_CHANCE = 0.25; // chance a destroyed small asteroid drops fuel
 
+const POWERUP_CHANCE = 0.15; // chance a destroyed small asteroid drops a power-up
+const POWERUP_LIFESPAN = 6000;
+const POWERUP_SPEED = 40;
+const POWERUP_TYPES = {
+  rapidfire: { color: 0xffdd00, duration: 8000, label: 'RAPID' },
+  shield:    { color: 0x00ddff, duration: 6000, label: 'SHIELD' },
+  spread:    { color: 0xff44ff, duration: 8000, label: 'SPREAD' },
+};
+const POWERUP_KEYS = Object.keys(POWERUP_TYPES);
+
 const INITIAL_SPAWN_INTERVAL = 3000;
 const MIN_SPAWN_INTERVAL = 800;
 const SPAWN_RAMP_RATE = 30; // ms reduction per second of play
@@ -48,11 +58,16 @@ export class PlayScene extends Phaser.Scene {
     this.gameOver = false;
     this.invincible = true;
 
+    // Active power-up state
+    this.activePowerUp = null;   // { type, expiresAt }
+    this.powerUpTimer = null;
+
     // Groups
     this.bullets = this.physics.add.group();
     this.asteroids = this.physics.add.group();
     this.ores = this.physics.add.group();
     this.fuelPickups = this.physics.add.group();
+    this.powerUps = this.physics.add.group();
 
     // Player ship — triangle via graphics texture
     this._createShipTexture();
@@ -77,6 +92,7 @@ export class PlayScene extends Phaser.Scene {
     this.physics.add.overlap(this.bullets, this.asteroids, this._bulletHitAsteroid, null, this);
     this.physics.add.overlap(this.ship, this.ores, this._collectOre, null, this);
     this.physics.add.overlap(this.ship, this.fuelPickups, this._collectFuel, null, this);
+    this.physics.add.overlap(this.ship, this.powerUps, this._collectPowerUp, null, this);
 
     // Spawn initial asteroids (3, safe distance from ship)
     for (let i = 0; i < 3; i++) {
@@ -96,6 +112,12 @@ export class PlayScene extends Phaser.Scene {
       fontFamily: 'monospace',
       color: '#aaaacc',
     }).setScrollFactor(0).setDepth(10);
+
+    this.powerUpText = this.add.text(width / 2, 12, '', {
+      fontSize: '16px',
+      fontFamily: 'monospace',
+      color: '#ffffff',
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(10);
   }
 
   update(time, delta) {
@@ -108,6 +130,8 @@ export class PlayScene extends Phaser.Scene {
     this._wrapWorldBounds();
     this._cleanupBullets(time);
     this._cleanupOres();
+    this._cleanupPowerUps();
+    this._tickPowerUp();
     this._spawnLogic(dt);
     this._updateHUD();
   }
@@ -144,7 +168,8 @@ export class PlayScene extends Phaser.Scene {
       this.ship.setAcceleration(0);
     }
 
-    if (fire && time > this.lastFired + FIRE_RATE && this.ammo > 0) {
+    const fireRate = (this.activePowerUp && this.activePowerUp.type === 'rapidfire') ? FIRE_RATE / 2 : FIRE_RATE;
+    if (fire && time > this.lastFired + fireRate && this.ammo > 0) {
       this._fireBullet(time);
     }
   }
@@ -153,19 +178,26 @@ export class PlayScene extends Phaser.Scene {
     this.ammo--;
     this.lastFired = time;
 
-    const angle = Phaser.Math.DegToRad(this.ship.angle - 90);
-    const x = this.ship.x + Math.cos(angle) * 20;
-    const y = this.ship.y + Math.sin(angle) * 20;
+    const baseAngle = Phaser.Math.DegToRad(this.ship.angle - 90);
+    const isSpread = this.activePowerUp && this.activePowerUp.type === 'spread';
+    const angles = isSpread
+      ? [baseAngle - 0.2, baseAngle, baseAngle + 0.2] // ~11.5 degree spread
+      : [baseAngle];
 
-    const bullet = this.add.circle(x, y, 3, 0xffffff);
-    this.physics.add.existing(bullet);
-    this.bullets.add(bullet);
-    bullet.body.setVelocity(
-      Math.cos(angle) * BULLET_SPEED + this.ship.body.velocity.x * 0.5,
-      Math.sin(angle) * BULLET_SPEED + this.ship.body.velocity.y * 0.5,
-    );
-    bullet.getData = () => ({ born: time });
-    bullet._born = time;
+    for (const angle of angles) {
+      const x = this.ship.x + Math.cos(angle) * 20;
+      const y = this.ship.y + Math.sin(angle) * 20;
+
+      const color = isSpread ? 0xff44ff : 0xffffff;
+      const bullet = this.add.circle(x, y, 3, color);
+      this.physics.add.existing(bullet);
+      this.bullets.add(bullet);
+      bullet.body.setVelocity(
+        Math.cos(angle) * BULLET_SPEED + this.ship.body.velocity.x * 0.5,
+        Math.sin(angle) * BULLET_SPEED + this.ship.body.velocity.y * 0.5,
+      );
+      bullet._born = time;
+    }
   }
 
   // -- Spawning -------------------------------------------------------------
@@ -219,8 +251,26 @@ export class PlayScene extends Phaser.Scene {
 
   // -- Collisions -----------------------------------------------------------
 
-  _hitAsteroid(_ship, _asteroid) {
+  _hitAsteroid(_ship, asteroid) {
     if (this.invincible) return;
+    if (this.activePowerUp && this.activePowerUp.type === 'shield') {
+      // Shield absorbs the hit — destroy the asteroid instead
+      const size = asteroid._size;
+      const cfg = ASTEROID_SIZES[size];
+      const ax = asteroid.x;
+      const ay = asteroid.y;
+      asteroid.destroy();
+      this.cameras.main.shake(80, 0.008);
+      if (cfg.splits > 0) {
+        const nextSize = size === 'large' ? 'medium' : 'small';
+        for (let i = 0; i < cfg.splits; i++) {
+          this._spawnAsteroid(nextSize, ax + Phaser.Math.Between(-10, 10), ay + Phaser.Math.Between(-10, 10));
+        }
+      } else {
+        this._spawnOre(ax, ay);
+      }
+      return;
+    }
     this._endGame();
   }
 
@@ -247,6 +297,10 @@ export class PlayScene extends Phaser.Scene {
       // Chance of fuel pickup
       if (Math.random() < FUEL_PICKUP_CHANCE) {
         this._spawnFuelPickup(ax, ay);
+      }
+      // Chance of power-up drop
+      if (Math.random() < POWERUP_CHANCE) {
+        this._spawnPowerUp(ax, ay);
       }
       // Ammo recovery: destroying a small asteroid gives 1 ammo back
       this.ammo = Math.min(AMMO_MAX, this.ammo + 1);
@@ -296,6 +350,113 @@ export class PlayScene extends Phaser.Scene {
     pickup.destroy();
   }
 
+  // -- Power-ups --------------------------------------------------------------
+
+  _spawnPowerUp(x, y) {
+    const type = POWERUP_KEYS[Phaser.Math.Between(0, POWERUP_KEYS.length - 1)];
+    const cfg = POWERUP_TYPES[type];
+    // Diamond shape
+    const pickup = this.add.polygon(x, y, [0, -8, 6, 0, 0, 8, -6, 0], cfg.color);
+    this.physics.add.existing(pickup);
+    this.powerUps.add(pickup);
+    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    pickup.body.setVelocity(Math.cos(angle) * POWERUP_SPEED, Math.sin(angle) * POWERUP_SPEED);
+    pickup.body.setSize(12, 12);
+    pickup._born = this.time.now;
+    pickup._type = type;
+    // Gentle rotation for visibility
+    this.tweens.add({
+      targets: pickup,
+      angle: 360,
+      duration: 2000,
+      repeat: -1,
+    });
+  }
+
+  _collectPowerUp(_ship, pickup) {
+    const type = pickup._type;
+    const cfg = POWERUP_TYPES[type];
+    pickup.destroy();
+
+    // Replace any active power-up
+    if (this.powerUpTimer) {
+      this.powerUpTimer.remove(false);
+    }
+
+    this.activePowerUp = { type, expiresAt: this.time.now + cfg.duration };
+
+    // Visual feedback on activation
+    this._flashShip(cfg.color);
+
+    // Shield: set ship alpha hint
+    if (type === 'shield') {
+      this.ship.setTint(0x00ddff);
+    }
+
+    // Floating label
+    const floatText = this.add.text(this.ship.x, this.ship.y - 20, cfg.label, {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      color: '#' + cfg.color.toString(16).padStart(6, '0'),
+    }).setOrigin(0.5).setDepth(10);
+    this.tweens.add({
+      targets: floatText,
+      y: this.ship.y - 50,
+      alpha: 0,
+      duration: 800,
+      onComplete: () => floatText.destroy(),
+    });
+
+    this.powerUpTimer = this.time.delayedCall(cfg.duration, () => {
+      this._deactivatePowerUp();
+    });
+  }
+
+  _deactivatePowerUp() {
+    if (!this.activePowerUp) return;
+    this.activePowerUp = null;
+    this.powerUpTimer = null;
+    if (!this.gameOver) {
+      this.ship.clearTint();
+    }
+  }
+
+  _tickPowerUp() {
+    if (!this.activePowerUp) {
+      this.powerUpText.setText('');
+      return;
+    }
+    const remaining = Math.max(0, this.activePowerUp.expiresAt - this.time.now);
+    const cfg = POWERUP_TYPES[this.activePowerUp.type];
+    const secs = (remaining / 1000).toFixed(1);
+    this.powerUpText.setText(`${cfg.label} ${secs}s`);
+    this.powerUpText.setColor('#' + cfg.color.toString(16).padStart(6, '0'));
+  }
+
+  _cleanupPowerUps() {
+    const now = this.time.now;
+    this.powerUps.getChildren().forEach((p) => {
+      const age = now - p._born;
+      if (age > POWERUP_LIFESPAN) {
+        p.destroy();
+      } else if (age > POWERUP_LIFESPAN - 1500) {
+        // Blink before expiring
+        p.setAlpha(Math.sin(age * 0.01) * 0.4 + 0.5);
+      }
+    });
+  }
+
+  _flashShip(color) {
+    this.ship.setTint(color);
+    this.time.delayedCall(200, () => {
+      if (this.activePowerUp && this.activePowerUp.type === 'shield') {
+        this.ship.setTint(0x00ddff);
+      } else if (!this.gameOver) {
+        this.ship.clearTint();
+      }
+    });
+  }
+
   // -- Cleanup --------------------------------------------------------------
 
   _cleanupBullets(time) {
@@ -332,6 +493,7 @@ export class PlayScene extends Phaser.Scene {
     this.asteroids.getChildren().forEach(wrap);
     this.ores.getChildren().forEach(wrap);
     this.fuelPickups.getChildren().forEach(wrap);
+    this.powerUps.getChildren().forEach(wrap);
   }
 
   // -- HUD ------------------------------------------------------------------
