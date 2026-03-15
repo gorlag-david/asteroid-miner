@@ -9,6 +9,13 @@ const config = {
   height: 600,
   backgroundColor: '#1a1a2e',
   parent: document.body,
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+  },
+  input: {
+    activePointers: 3,
+  },
   scene: [BootScene, PlayScene, GameOverScene],
   physics: {
     default: 'arcade',

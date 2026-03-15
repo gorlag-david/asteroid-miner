@@ -97,6 +97,15 @@ export class PlayScene extends Phaser.Scene {
       right: Phaser.Input.Keyboard.KeyCodes.D,
     });
 
+    // Touch controls (only on non-desktop)
+    this.isMobile = !this.sys.game.device.os.desktop;
+    this.touchThrust = false;
+    this.touchAngle = null; // radians, null = no joystick input
+    this.touchFire = false;
+    if (this.isMobile) {
+      this._createTouchControls();
+    }
+
     // Collisions
     this.physics.add.overlap(this.ship, this.asteroids, this._hitAsteroid, null, this);
     this.physics.add.overlap(this.bullets, this.asteroids, this._bulletHitAsteroid, null, this);
@@ -161,9 +170,21 @@ export class PlayScene extends Phaser.Scene {
     const left = this.cursors.left.isDown || this.wasd.left.isDown;
     const right = this.cursors.right.isDown || this.wasd.right.isDown;
     const thrust = this.cursors.up.isDown || this.wasd.up.isDown;
-    const fire = this.cursors.space.isDown;
+    const fire = this.cursors.space.isDown || this.touchFire;
 
-    if (left) {
+    // Touch joystick: point ship toward joystick angle and thrust
+    if (this.touchAngle !== null) {
+      // Set ship angle directly to joystick direction (+90 because ship sprite points up)
+      const targetDeg = Phaser.Math.RadToDeg(this.touchAngle) + 90;
+      // Smooth rotation toward target
+      let diff = Phaser.Math.Angle.WrapDegrees(targetDeg - this.ship.angle);
+      if (Math.abs(diff) < 5) {
+        this.ship.setAngle(targetDeg);
+        this.ship.setAngularVelocity(0);
+      } else {
+        this.ship.setAngularVelocity(diff > 0 ? SHIP_ROTATION_SPEED * 2 : -SHIP_ROTATION_SPEED * 2);
+      }
+    } else if (left) {
       this.ship.setAngularVelocity(-SHIP_ROTATION_SPEED);
     } else if (right) {
       this.ship.setAngularVelocity(SHIP_ROTATION_SPEED);
@@ -171,7 +192,8 @@ export class PlayScene extends Phaser.Scene {
       this.ship.setAngularVelocity(0);
     }
 
-    if (thrust && this.fuel > 0) {
+    const shouldThrust = thrust || this.touchThrust;
+    if (shouldThrust && this.fuel > 0) {
       this.physics.velocityFromRotation(
         Phaser.Math.DegToRad(this.ship.angle - 90),
         SHIP_THRUST,
@@ -191,6 +213,92 @@ export class PlayScene extends Phaser.Scene {
     if (fire && time > this.lastFired + fireRate && this.ammo > 0) {
       this._fireBullet(time);
     }
+  }
+
+  // -- Touch controls -------------------------------------------------------
+
+  _createTouchControls() {
+    const { width, height } = this.scale;
+    const joyRadius = 50;
+    const joyX = 90;
+    const joyY = height - 90;
+    const deadZone = 12;
+
+    // Joystick base (semi-transparent circle)
+    this.joyBase = this.add.circle(joyX, joyY, joyRadius, 0xffffff, 0.1)
+      .setScrollFactor(0).setDepth(20);
+    this.joyThumb = this.add.circle(joyX, joyY, 20, 0xffffff, 0.3)
+      .setScrollFactor(0).setDepth(21);
+
+    // Fire button
+    const btnRadius = 40;
+    const btnX = width - 80;
+    const btnY = height - 90;
+    this.fireBtn = this.add.circle(btnX, btnY, btnRadius, 0xe94560, 0.2)
+      .setScrollFactor(0).setDepth(20);
+    this.fireBtnLabel = this.add.text(btnX, btnY, 'FIRE', {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      color: '#e94560',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(21).setAlpha(0.6);
+
+    // Track which pointer is doing what
+    this._joyPointerId = null;
+    this._firePointerId = null;
+
+    this.input.on('pointerdown', (pointer) => {
+      // Left half = joystick, right half = fire
+      if (pointer.x < width / 2) {
+        this._joyPointerId = pointer.id;
+        this._updateJoystick(pointer, joyX, joyY, joyRadius, deadZone);
+      } else {
+        this._firePointerId = pointer.id;
+        this.touchFire = true;
+        this.fireBtn.setFillStyle(0xe94560, 0.5);
+      }
+    });
+
+    this.input.on('pointermove', (pointer) => {
+      if (pointer.id === this._joyPointerId) {
+        this._updateJoystick(pointer, joyX, joyY, joyRadius, deadZone);
+      }
+    });
+
+    this.input.on('pointerup', (pointer) => {
+      if (pointer.id === this._joyPointerId) {
+        this._joyPointerId = null;
+        this.touchThrust = false;
+        this.touchAngle = null;
+        this.joyThumb.setPosition(joyX, joyY);
+      }
+      if (pointer.id === this._firePointerId) {
+        this._firePointerId = null;
+        this.touchFire = false;
+        this.fireBtn.setFillStyle(0xe94560, 0.2);
+      }
+    });
+  }
+
+  _updateJoystick(pointer, baseX, baseY, radius, deadZone) {
+    const dx = pointer.x - baseX;
+    const dy = pointer.y - baseY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < deadZone) {
+      this.touchThrust = false;
+      this.touchAngle = null;
+      this.joyThumb.setPosition(baseX, baseY);
+      return;
+    }
+
+    // Clamp thumb to joystick radius
+    const clampDist = Math.min(dist, radius);
+    const nx = dx / dist;
+    const ny = dy / dist;
+    this.joyThumb.setPosition(baseX + nx * clampDist, baseY + ny * clampDist);
+
+    this.touchAngle = Math.atan2(dy, dx);
+    this.touchThrust = true;
   }
 
   _fireBullet(time) {

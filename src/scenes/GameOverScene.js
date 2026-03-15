@@ -36,7 +36,9 @@ export class GameOverScene extends Phaser.Scene {
       color: bestColor,
     }).setOrigin(0.5);
 
-    const prompt = this.add.text(width / 2, height * 0.7, 'Press ENTER or SPACE to retry', {
+    const isMobile = !this.sys.game.device.os.desktop;
+    const promptMsg = isMobile ? 'Tap to retry' : 'Press ENTER or SPACE to retry';
+    const prompt = this.add.text(width / 2, height * 0.7, promptMsg, {
       fontSize: '20px',
       fontFamily: 'monospace',
       color: '#0f3460',
@@ -50,8 +52,13 @@ export class GameOverScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    this.input.keyboard.on('keydown-SPACE', () => this.scene.start('PlayScene'));
-    this.input.keyboard.on('keydown-ENTER', () => this.scene.start('PlayScene'));
+    const restartGame = () => this.scene.start('PlayScene');
+    this.input.keyboard.on('keydown-SPACE', restartGame);
+    this.input.keyboard.on('keydown-ENTER', restartGame);
+    this.input.on('pointerdown', (pointer) => {
+      const hitObjects = this.input.hitTestPointer(pointer);
+      if (hitObjects.length === 0) restartGame();
+    });
 
     // Community-driven feature request link
     const featureLink = this.add.text(width / 2, height * 0.82, 'Want a new feature? Request it on GitHub', {

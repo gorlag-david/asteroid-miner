@@ -52,7 +52,9 @@ export class BootScene extends Phaser.Scene {
       }).setOrigin(0.5);
     }
 
-    const prompt = this.add.text(width / 2, height * 0.78, 'Press ENTER or SPACE to start', {
+    const isMobile = !this.sys.game.device.os.desktop;
+    const promptMsg = isMobile ? 'Tap to start' : 'Press ENTER or SPACE to start';
+    const prompt = this.add.text(width / 2, height * 0.78, promptMsg, {
       fontSize: '20px',
       fontFamily: 'monospace',
       color: '#0f3460',
@@ -67,8 +69,14 @@ export class BootScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    this.input.keyboard.on('keydown-SPACE', () => this.scene.start('PlayScene'));
-    this.input.keyboard.on('keydown-ENTER', () => this.scene.start('PlayScene'));
+    const startGame = () => this.scene.start('PlayScene');
+    this.input.keyboard.on('keydown-SPACE', startGame);
+    this.input.keyboard.on('keydown-ENTER', startGame);
+    this.input.on('pointerdown', (pointer) => {
+      // Don't start game if tapping an interactive element (link/button)
+      const hitObjects = this.input.hitTestPointer(pointer);
+      if (hitObjects.length === 0) startGame();
+    });
 
     // Ko-fi tip jar button
     const tipBtn = this.add.text(width / 2, height - 30, 'Buy Me a Coffee on Ko-fi', {
