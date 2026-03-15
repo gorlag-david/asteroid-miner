@@ -18,8 +18,8 @@ const GAMES = [
     tagline: 'Drop coins. Push prizes.',
     color: 0xffcc00,
     colorHex: '#ffcc00',
-    available: false,
-    scene: null,
+    available: true,
+    scene: 'CoinPusherPlayScene',
   },
 ];
 

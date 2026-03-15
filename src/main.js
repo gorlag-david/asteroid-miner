@@ -5,6 +5,8 @@ import { ShipSelectScene } from './games/asteroid-miner/scenes/ShipSelectScene.j
 import { PlayScene } from './games/asteroid-miner/scenes/PlayScene.js';
 import { GameOverScene } from './games/asteroid-miner/scenes/GameOverScene.js';
 import { LeaderboardScene } from './games/asteroid-miner/scenes/LeaderboardScene.js';
+import { CoinPusherPlayScene } from './games/coin-pusher/scenes/CoinPusherPlayScene.js';
+import { CoinPusherGameOverScene } from './games/coin-pusher/scenes/CoinPusherGameOverScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -19,7 +21,7 @@ const config = {
   input: {
     activePointers: 3,
   },
-  scene: [ArcadeMenuScene, BootScene, ShipSelectScene, PlayScene, GameOverScene, LeaderboardScene],
+  scene: [ArcadeMenuScene, BootScene, ShipSelectScene, PlayScene, GameOverScene, LeaderboardScene, CoinPusherPlayScene, CoinPusherGameOverScene],
   physics: {
     default: 'arcade',
     arcade: {
