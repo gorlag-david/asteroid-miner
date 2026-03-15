@@ -90,6 +90,19 @@ export class LeaderboardScene extends Phaser.Scene {
     backBtn.on('pointerout', () => backBtn.setStyle({ color: '#e94560', backgroundColor: '#2a2a4a' }));
     backBtn.on('pointerdown', () => this.scene.start('BootScene'));
 
+    // Back to arcade menu
+    const arcadeBtn = this.add.text(width / 2, height - 20, '[ ARCADE MENU ]', {
+      fontSize: '12px',
+      fontFamily: 'monospace',
+      color: '#ff44ff',
+      backgroundColor: '#1a1a2e',
+      padding: { x: 8, y: 3 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    arcadeBtn.on('pointerover', () => arcadeBtn.setStyle({ color: '#ffffff', backgroundColor: '#4a1a4e' }));
+    arcadeBtn.on('pointerout', () => arcadeBtn.setStyle({ color: '#ff44ff', backgroundColor: '#1a1a2e' }));
+    arcadeBtn.on('pointerdown', () => this.scene.start('ArcadeMenuScene'));
+
     this.input.keyboard.on('keydown-ESC', () => this.scene.start('BootScene'));
     this.input.keyboard.on('keydown-ENTER', () => this.scene.start('BootScene'));
     this.input.keyboard.on('keydown-SPACE', () => this.scene.start('BootScene'));

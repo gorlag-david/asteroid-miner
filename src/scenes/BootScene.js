@@ -116,5 +116,20 @@ export class BootScene extends Phaser.Scene {
     tipBtn.on('pointerover', () => tipBtn.setStyle({ color: '#ffffff', backgroundColor: '#ff5e5b' }));
     tipBtn.on('pointerout', () => tipBtn.setStyle({ color: '#ff5e5b', backgroundColor: '#2a2a4a' }));
     tipBtn.on('pointerdown', () => window.open(KOFI_URL, '_blank'));
+
+    // Back to arcade menu
+    const arcadeBtn = this.add.text(60, 20, '< ARCADE', {
+      fontSize: '12px',
+      fontFamily: 'monospace',
+      color: '#ff44ff',
+      backgroundColor: '#1a1a2e',
+      padding: { x: 6, y: 3 },
+    }).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+
+    arcadeBtn.on('pointerover', () => arcadeBtn.setStyle({ color: '#ffffff', backgroundColor: '#4a1a4e' }));
+    arcadeBtn.on('pointerout', () => arcadeBtn.setStyle({ color: '#ff44ff', backgroundColor: '#1a1a2e' }));
+    arcadeBtn.on('pointerdown', () => this.scene.start('ArcadeMenuScene'));
+
+    this.input.keyboard.on('keydown-ESC', () => this.scene.start('ArcadeMenuScene'));
   }
 }
