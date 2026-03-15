@@ -902,7 +902,10 @@ export class PlayScene extends Phaser.Scene {
 
   _purchaseStoreItem() {
     const item = STORE_ITEMS[this.storeSelection];
-    if (this.score < item.cost) return; // can't afford
+    if (this.score < item.cost) {
+      this._showInsufficientFunds();
+      return;
+    }
 
     this.score -= item.cost;
 
@@ -935,6 +938,63 @@ export class PlayScene extends Phaser.Scene {
       this.storeCursor.setColor('#00ff00');
       this.time.delayedCall(200, () => {
         if (this.storeCursor) this.storeCursor.setColor('#ffcc00');
+      });
+    }
+  }
+
+  _showInsufficientFunds() {
+    // Flash the selected item text red
+    const itemText = this.storeItemTexts && this.storeItemTexts[this.storeSelection];
+    if (itemText) {
+      itemText.setColor('#ff2222');
+      this.time.delayedCall(300, () => {
+        if (itemText && itemText.active) {
+          this._updateStoreHighlight();
+        }
+      });
+    }
+
+    // Shake the cursor left-right
+    if (this.storeCursor) {
+      const origX = this.storeCursor.x;
+      this.tweens.add({
+        targets: this.storeCursor,
+        x: origX + 6,
+        duration: 40,
+        yoyo: true,
+        repeat: 3,
+        onComplete: () => {
+          if (this.storeCursor) this.storeCursor.x = origX;
+        },
+      });
+    }
+
+    // Show "NOT ENOUGH ORE" flash text
+    const { width, height } = this.scale;
+    const cx = width / 2;
+    const cy = height / 2;
+    const warnText = this.add.text(cx, cy + 110, 'NOT ENOUGH ORE', {
+      fontSize: '16px',
+      fontFamily: 'monospace',
+      fontStyle: 'bold',
+      color: '#ff4444',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
+    this.storeUI.push(warnText);
+    this.tweens.add({
+      targets: warnText,
+      alpha: 0,
+      duration: 1200,
+      ease: 'Power2',
+      onComplete: () => warnText.destroy(),
+    });
+
+    // Flash the balance text red briefly
+    if (this.storeBalanceText) {
+      this.storeBalanceText.setColor('#ff4444');
+      this.time.delayedCall(400, () => {
+        if (this.storeBalanceText && this.storeBalanceText.active) {
+          this.storeBalanceText.setColor('#aaaacc');
+        }
       });
     }
   }
