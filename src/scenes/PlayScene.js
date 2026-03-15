@@ -40,6 +40,9 @@ const POWERUP_TYPES = {
 };
 const POWERUP_KEYS = Object.keys(POWERUP_TYPES);
 
+const COMBO_WINDOW = 2000; // ms — collect ore within this window to keep combo alive
+const COMBO_MULTIPLIERS = [1, 1.5, 2, 2.5, 3]; // combo step 0,1,2,3,4+
+
 const INITIAL_SPAWN_INTERVAL = 3000;
 const MIN_SPAWN_INTERVAL = 800;
 const SPAWN_RAMP_RATE = 30; // ms reduction per second of play
@@ -64,6 +67,11 @@ export class PlayScene extends Phaser.Scene {
     // Active power-up state
     this.activePowerUp = null;   // { type, expiresAt }
     this.powerUpTimer = null;
+
+    // Combo streak state
+    this.comboCount = 0;         // consecutive ore pickups within the combo window
+    this.comboMultiplier = 1;
+    this.lastOreTime = 0;        // timestamp of last ore collection
 
     // Groups
     this.bullets = this.physics.add.group();
@@ -121,6 +129,13 @@ export class PlayScene extends Phaser.Scene {
       fontFamily: 'monospace',
       color: '#ffffff',
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(10);
+
+    this.comboText = this.add.text(width - 12, 12, '', {
+      fontSize: '20px',
+      fontFamily: 'monospace',
+      fontStyle: 'bold',
+      color: '#ffcc00',
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(10).setAlpha(0);
   }
 
   update(time, delta) {
@@ -136,6 +151,7 @@ export class PlayScene extends Phaser.Scene {
     this._cleanupOres();
     this._cleanupPowerUps();
     this._tickPowerUp();
+    this._tickCombo();
     this._spawnLogic(dt);
     this._updateHUD();
   }
@@ -347,12 +363,28 @@ export class PlayScene extends Phaser.Scene {
   }
 
   _collectOre(_ship, ore) {
-    this.score += ORE_SCORE;
-    // Floating score text
-    const floatText = this.add.text(ore.x, ore.y, `+${ORE_SCORE}`, {
-      fontSize: '14px',
+    const now = this.time.now;
+
+    // Update combo streak
+    if (now - this.lastOreTime <= COMBO_WINDOW) {
+      this.comboCount = Math.min(this.comboCount + 1, COMBO_MULTIPLIERS.length - 1);
+    } else {
+      this.comboCount = 0;
+    }
+    this.lastOreTime = now;
+    this.comboMultiplier = COMBO_MULTIPLIERS[this.comboCount];
+
+    const points = Math.round(ORE_SCORE * this.comboMultiplier);
+    this.score += points;
+
+    // Floating score text — color shifts with higher combos
+    const comboColors = ['#ffcc00', '#ffdd33', '#ffaa00', '#ff8800', '#ff4400'];
+    const color = comboColors[this.comboCount] || '#ff4400';
+    const label = this.comboMultiplier > 1 ? `+${points} x${this.comboMultiplier}` : `+${points}`;
+    const floatText = this.add.text(ore.x, ore.y, label, {
+      fontSize: this.comboMultiplier > 1 ? '16px' : '14px',
       fontFamily: 'monospace',
-      color: '#ffcc00',
+      color,
     }).setOrigin(0.5).setDepth(10);
     this.tweens.add({
       targets: floatText,
@@ -361,6 +393,12 @@ export class PlayScene extends Phaser.Scene {
       duration: 600,
       onComplete: () => floatText.destroy(),
     });
+
+    // Combo HUD pop animation
+    if (this.comboMultiplier > 1) {
+      this._showComboHUD();
+    }
+
     ore.destroy();
   }
 
@@ -473,6 +511,35 @@ export class PlayScene extends Phaser.Scene {
       } else if (!this.gameOver) {
         this.ship.clearTint();
       }
+    });
+  }
+
+  // -- Combo streak ---------------------------------------------------------
+
+  _tickCombo() {
+    if (this.comboCount > 0 && this.time.now - this.lastOreTime > COMBO_WINDOW) {
+      this.comboCount = 0;
+      this.comboMultiplier = 1;
+      // Fade out combo text
+      this.tweens.add({
+        targets: this.comboText,
+        alpha: 0,
+        duration: 300,
+      });
+    }
+  }
+
+  _showComboHUD() {
+    this.comboText.setText(`x${this.comboMultiplier}`);
+    this.comboText.setAlpha(1);
+    // Scale-up pop animation
+    this.comboText.setScale(1.6);
+    this.tweens.add({
+      targets: this.comboText,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 200,
+      ease: 'Back.easeOut',
     });
   }
 
