@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { KOFI_URL, GITHUB_ISSUES_URL } from '../config.js';
+import { KOFI_URL, GITHUB_ISSUES_URL } from '../../../config.js';
 import { generateAllTextures } from '../sprites.js';
 
 export class BootScene extends Phaser.Scene {

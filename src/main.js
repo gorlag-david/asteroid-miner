@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import { ArcadeMenuScene } from './scenes/ArcadeMenuScene.js';
-import { BootScene } from './scenes/BootScene.js';
-import { ShipSelectScene } from './scenes/ShipSelectScene.js';
-import { PlayScene } from './scenes/PlayScene.js';
-import { GameOverScene } from './scenes/GameOverScene.js';
-import { LeaderboardScene } from './scenes/LeaderboardScene.js';
+import { BootScene } from './games/asteroid-miner/scenes/BootScene.js';
+import { ShipSelectScene } from './games/asteroid-miner/scenes/ShipSelectScene.js';
+import { PlayScene } from './games/asteroid-miner/scenes/PlayScene.js';
+import { GameOverScene } from './games/asteroid-miner/scenes/GameOverScene.js';
+import { LeaderboardScene } from './games/asteroid-miner/scenes/LeaderboardScene.js';
 
 const config = {
   type: Phaser.AUTO,

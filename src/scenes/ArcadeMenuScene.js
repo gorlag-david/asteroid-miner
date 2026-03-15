@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { generateAllTextures } from '../sprites.js';
+import { generateAllTextures } from '../games/asteroid-miner/sprites.js';
 import { KOFI_URL, GITHUB_ISSUES_URL } from '../config.js';
 
 const GAMES = [

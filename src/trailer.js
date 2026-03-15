@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { generateAllTextures } from './sprites.js';
-import { TrailerScene } from './scenes/TrailerScene.js';
+import { generateAllTextures } from './games/asteroid-miner/sprites.js';
+import { TrailerScene } from './games/asteroid-miner/scenes/TrailerScene.js';
 
 // Tiny boot scene just to generate textures, then start the trailer
 class TrailerBootScene extends Phaser.Scene {
