@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://gorlag-david.github.io/asteroid-miner/sitemap.xml
