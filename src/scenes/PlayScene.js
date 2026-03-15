@@ -23,8 +23,11 @@ const ASTEROID_SIZES = {
 };
 
 const ORE_SPEED = 50;
-const ORE_LIFESPAN = 5000;
+const ORE_LIFESPAN = 8000;
 const ORE_SCORE = 10;
+const ORE_MAGNET_RADIUS = 80;
+const ORE_MAGNET_STRENGTH = 200; // px/s drift toward player
+const ORE_DESPAWN_WARN = 2000; // ms before expiry to start warning pulse
 const FUEL_PICKUP_CHANCE = 0.25; // chance a destroyed small asteroid drops fuel
 
 const POWERUP_CHANCE = 0.15; // chance a destroyed small asteroid drops a power-up
@@ -129,6 +132,7 @@ export class PlayScene extends Phaser.Scene {
     this._handleInput(time, dt);
     this._wrapWorldBounds();
     this._cleanupBullets(time);
+    this._applyOreMagnetism(dt);
     this._cleanupOres();
     this._cleanupPowerUps();
     this._tickPowerUp();
@@ -472,6 +476,27 @@ export class PlayScene extends Phaser.Scene {
     });
   }
 
+  // -- Ore magnetism --------------------------------------------------------
+
+  _applyOreMagnetism(dt) {
+    const sx = this.ship.x;
+    const sy = this.ship.y;
+    this.ores.getChildren().forEach((ore) => {
+      const dx = sx - ore.x;
+      const dy = sy - ore.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < ORE_MAGNET_RADIUS && dist > 1) {
+        // Stronger pull the closer the ore is
+        const factor = 1 - dist / ORE_MAGNET_RADIUS;
+        const pull = ORE_MAGNET_STRENGTH * factor;
+        ore.body.setVelocity(
+          ore.body.velocity.x + (dx / dist) * pull * dt,
+          ore.body.velocity.y + (dy / dist) * pull * dt,
+        );
+      }
+    });
+  }
+
   // -- Cleanup --------------------------------------------------------------
 
   _cleanupBullets(time) {
@@ -486,8 +511,16 @@ export class PlayScene extends Phaser.Scene {
       const age = now - o._born;
       if (age > ORE_LIFESPAN) {
         o.destroy();
-      } else if (age > ORE_LIFESPAN - 1000) {
-        o.setAlpha(Math.max(0.1, 1 - (age - (ORE_LIFESPAN - 1000)) / 1000));
+      } else if (age > ORE_LIFESPAN - ORE_DESPAWN_WARN) {
+        // Pulse: rapid alpha oscillation signals imminent despawn
+        const t = (age - (ORE_LIFESPAN - ORE_DESPAWN_WARN)) / ORE_DESPAWN_WARN; // 0→1
+        const pulse = 0.3 + 0.7 * Math.abs(Math.sin(age * 0.008));
+        o.setAlpha(pulse * (1 - t * 0.6)); // fade out as t→1
+        // Brighten ore tint to signal urgency
+        if (!o._despawnWarned) {
+          o._despawnWarned = true;
+          o.setScale(1.2);
+        }
       }
     });
   }
