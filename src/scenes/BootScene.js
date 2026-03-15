@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 
+const TIP_JAR_URL = 'https://ko-fi.com/lazygamedev';
+
 export class BootScene extends Phaser.Scene {
   constructor() {
     super('BootScene');
@@ -47,5 +49,15 @@ export class BootScene extends Phaser.Scene {
 
     this.input.keyboard.on('keydown-SPACE', () => this.scene.start('PlayScene'));
     this.input.keyboard.on('keydown-ENTER', () => this.scene.start('PlayScene'));
+
+    const tipBtn = this.add.text(width / 2, height - 30, 'Support the Dev - $1', {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      color: '#555577',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    tipBtn.on('pointerover', () => tipBtn.setColor('#8888cc'));
+    tipBtn.on('pointerout', () => tipBtn.setColor('#555577'));
+    tipBtn.on('pointerdown', () => window.open(TIP_JAR_URL, '_blank'));
   }
 }
