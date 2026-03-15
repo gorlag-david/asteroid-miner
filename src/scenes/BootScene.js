@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { KOFI_URL, GITHUB_ISSUES_URL } from '../config.js';
+import { generateAllTextures } from '../sprites.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -7,6 +8,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   create() {
+    generateAllTextures(this);
     const { width, height } = this.scale;
 
     this.add.text(width / 2, height / 3, 'ASTEROID MINER', {

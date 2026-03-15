@@ -80,8 +80,7 @@ export class PlayScene extends Phaser.Scene {
     this.fuelPickups = this.physics.add.group();
     this.powerUps = this.physics.add.group();
 
-    // Player ship — triangle via graphics texture
-    this._createShipTexture();
+    // Player ship — detailed procedural sprite (generated in BootScene)
     this.ship = this.physics.add.sprite(width / 2, height / 2, 'ship');
     this.ship.setDrag(SHIP_DRAG);
     this.ship.setMaxVelocity(SHIP_MAX_SPEED);
@@ -208,9 +207,8 @@ export class PlayScene extends Phaser.Scene {
       const x = this.ship.x + Math.cos(angle) * 20;
       const y = this.ship.y + Math.sin(angle) * 20;
 
-      const color = isSpread ? 0xff44ff : 0xffffff;
-      const bullet = this.add.circle(x, y, 3, color);
-      this.physics.add.existing(bullet);
+      const bulletTex = isSpread ? 'bullet_spread' : 'bullet';
+      const bullet = this.physics.add.sprite(x, y, bulletTex);
       this.bullets.add(bullet);
       bullet.body.setVelocity(
         Math.cos(angle) * BULLET_SPEED + this.ship.body.velocity.x * 0.5,
@@ -249,9 +247,8 @@ export class PlayScene extends Phaser.Scene {
       }
     }
 
-    const color = size === 'large' ? 0x555577 : size === 'medium' ? 0x666688 : 0x777799;
-    const asteroid = this.add.circle(x, y, cfg.radius, color);
-    this.physics.add.existing(asteroid);
+    const texKey = size === 'large' ? 'asteroid_large' : size === 'medium' ? 'asteroid_medium' : 'asteroid_small';
+    const asteroid = this.physics.add.sprite(x, y, texKey);
     this.asteroids.add(asteroid);
 
     let angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
@@ -265,7 +262,10 @@ export class PlayScene extends Phaser.Scene {
     }
     const speed = cfg.speed + Phaser.Math.FloatBetween(-20, 20);
     asteroid.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-    asteroid.body.setCircle(cfg.radius);
+    // Center the circular physics body within the (larger) sprite texture
+    const texW = asteroid.width;
+    const offset = (texW / 2) - cfg.radius;
+    asteroid.body.setCircle(cfg.radius, offset, offset);
     asteroid._size = size;
   }
 
@@ -343,8 +343,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   _spawnOre(x, y) {
-    const ore = this.add.polygon(x, y, [0, -6, 5, 0, 0, 6, -5, 0], 0xffcc00);
-    this.physics.add.existing(ore);
+    const ore = this.physics.add.sprite(x, y, 'ore');
     this.ores.add(ore);
     const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
     ore.body.setVelocity(Math.cos(angle) * ORE_SPEED, Math.sin(angle) * ORE_SPEED);
@@ -353,8 +352,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   _spawnFuelPickup(x, y) {
-    const pickup = this.add.circle(x, y, 6, 0x00ff88);
-    this.physics.add.existing(pickup);
+    const pickup = this.physics.add.sprite(x, y, 'fuel_cell');
     this.fuelPickups.add(pickup);
     const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
     pickup.body.setVelocity(Math.cos(angle) * ORE_SPEED, Math.sin(angle) * ORE_SPEED);
@@ -412,9 +410,7 @@ export class PlayScene extends Phaser.Scene {
   _spawnPowerUp(x, y) {
     const type = POWERUP_KEYS[Phaser.Math.Between(0, POWERUP_KEYS.length - 1)];
     const cfg = POWERUP_TYPES[type];
-    // Diamond shape
-    const pickup = this.add.polygon(x, y, [0, -8, 6, 0, 0, 8, -6, 0], cfg.color);
-    this.physics.add.existing(pickup);
+    const pickup = this.physics.add.sprite(x, y, `powerup_${type}`);
     this.powerUps.add(pickup);
     const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
     pickup.body.setVelocity(Math.cos(angle) * POWERUP_SPEED, Math.sin(angle) * POWERUP_SPEED);
@@ -715,20 +711,4 @@ export class PlayScene extends Phaser.Scene {
     });
   }
 
-  // -- Texture generation ---------------------------------------------------
-
-  _createShipTexture() {
-    if (this.textures.exists('ship')) return;
-    const g = this.add.graphics();
-    g.fillStyle(0xe94560, 1);
-    g.beginPath();
-    g.moveTo(16, 0);
-    g.lineTo(32, 32);
-    g.lineTo(16, 24);
-    g.lineTo(0, 32);
-    g.closePath();
-    g.fillPath();
-    g.generateTexture('ship', 32, 32);
-    g.destroy();
-  }
 }
