@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
-
-const TIP_JAR_URL = 'https://ko-fi.com/lazygamedev';
+import { KOFI_URL } from '../config.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -50,14 +49,17 @@ export class BootScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-SPACE', () => this.scene.start('PlayScene'));
     this.input.keyboard.on('keydown-ENTER', () => this.scene.start('PlayScene'));
 
-    const tipBtn = this.add.text(width / 2, height - 30, 'Support the Dev - $1', {
+    // Ko-fi tip jar button
+    const tipBtn = this.add.text(width / 2, height - 30, 'Buy Me a Coffee on Ko-fi', {
       fontSize: '14px',
       fontFamily: 'monospace',
-      color: '#555577',
+      color: '#ff5e5b',
+      backgroundColor: '#2a2a4a',
+      padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-    tipBtn.on('pointerover', () => tipBtn.setColor('#8888cc'));
-    tipBtn.on('pointerout', () => tipBtn.setColor('#555577'));
-    tipBtn.on('pointerdown', () => window.open(TIP_JAR_URL, '_blank'));
+    tipBtn.on('pointerover', () => tipBtn.setStyle({ color: '#ffffff', backgroundColor: '#ff5e5b' }));
+    tipBtn.on('pointerout', () => tipBtn.setStyle({ color: '#ff5e5b', backgroundColor: '#2a2a4a' }));
+    tipBtn.on('pointerdown', () => window.open(KOFI_URL, '_blank'));
   }
 }

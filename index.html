@@ -12,5 +12,15 @@
 </head>
 <body>
   <script type="module" src="/src/main.js"></script>
+  <!-- Ko-fi floating donation button widget -->
+  <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
+  <script>
+    kofiWidgetOverlay.draw('lazygamedev', {
+      'type': 'floating-chat',
+      'floating-chat.donateButton.text': 'Tip the Dev',
+      'floating-chat.donateButton.background-color': '#ff5e5b',
+      'floating-chat.donateButton.text-color': '#fff'
+    });
+  </script>
 </body>
 </html>
