@@ -1,5 +1,11 @@
 import Phaser from 'phaser';
 import { generateCoinPusherTextures } from '../sprites.js';
+import { drawTray, createWalls } from '../tray.js';
+import { emitCoinScore, emitPrizeScore, cameraShake, emitCoinLanding, emitSparkle } from '../effects.js';
+import { ComboTracker } from '../combo.js';
+import { rollPrize, getPrizeConfig, PRIZE_CONFIG } from '../prizes.js';
+import { createBumpers } from '../bumpers.js';
+import { CoinPusherHUD } from '../hud.js';
 
 // Layout constants — 800x600 canvas
 const TRAY_LEFT = 200;
@@ -11,7 +17,9 @@ const TRAY_WIDTH = TRAY_RIGHT - TRAY_LEFT;
 // Pusher
 const PUSHER_Y_MIN = 180;
 const PUSHER_Y_MAX = 320;
-const PUSHER_SPEED = 80; // px/s
+const PUSHER_SPEED_MIN = 80;   // starting speed px/s
+const PUSHER_SPEED_MAX = 160;  // max speed after ramp
+const PUSHER_RAMP_DURATION = 120; // seconds to reach max speed
 
 // Coin drop
 const DROP_Y = TRAY_TOP + 10;
@@ -22,17 +30,16 @@ const COIN_RADIUS = 10;
 
 // Game
 const STARTING_COINS = 30;
-const DROP_COOLDOWN = 400; // ms between drops
-const PRIZE_SPAWN_INTERVAL = 8000; // ms
+const DROP_COOLDOWN = 400;
+const PRIZE_SPAWN_INTERVAL = 8000;
 const MAX_PRIZES = 5;
 
-// Scoring
-const COIN_VALUE = 1;
-const GEM_VALUE = 5;
-const TOKEN_VALUE = 10;
-
-// Win zone: the front edge where coins fall off to score
+// Win zone
 const WIN_ZONE_Y = TRAY_BOTTOM - 10;
+
+// Bonus round
+const BONUS_INTERVAL = 30; // seconds between bonus rounds
+const BONUS_PRIZE_COUNT = 3;
 
 export class CoinPusherPlayScene extends Phaser.Scene {
   constructor() {
@@ -44,33 +51,40 @@ export class CoinPusherPlayScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.isMobile = !this.sys.game.device.os.desktop;
 
+    // Game state
     this.coinsLeft = STARTING_COINS;
     this.score = 0;
     this.lastDrop = 0;
     this.gameOver = false;
     this.prizeTimer = 0;
+    this.elapsed = 0;
+    this.coinsDropped = 0;
+    this.prizesCollected = 0;
+    this.lastBonusTime = 0;
 
     this.cameras.main.setBackgroundColor('#1a1a2e');
 
-    // Draw tray walls
-    this._drawTray(width, height);
+    // Draw tray visuals (replaced inline _drawTray)
+    drawTray(this);
 
     // Physics groups
     this.coins = this.physics.add.group();
     this.prizes = this.physics.add.group();
 
-    // Pusher — a kinematic body that moves up and down
+    // Pusher
     this.pusher = this.physics.add.sprite(TRAY_LEFT + TRAY_WIDTH / 2, PUSHER_Y_MIN, 'pusher');
     this.pusher.setImmovable(true);
     this.pusher.body.setAllowGravity(false);
     this.pusher.setPushable(false);
-    // Widen pusher to match tray width
     this.pusher.setDisplaySize(TRAY_WIDTH - 20, 20);
     this.pusher.body.setSize(TRAY_WIDTH - 20, 20);
-    this.pusherDirection = 1; // 1 = moving down, -1 = moving up
+    this.pusherDirection = 1;
 
-    // Tray boundary walls (invisible physics bodies)
-    this._createWalls();
+    // Walls (replaced inline _createWalls)
+    createWalls(this, this.coins, this.prizes);
+
+    // Bumpers
+    this.bumpers = createBumpers(this, { coins: this.coins, prizes: this.prizes });
 
     // Collisions
     this.physics.add.collider(this.coins, this.coins);
@@ -79,20 +93,15 @@ export class CoinPusherPlayScene extends Phaser.Scene {
     this.physics.add.collider(this.prizes, this.pusher);
     this.physics.add.collider(this.prizes, this.prizes);
 
+    // Combo tracker
+    this.combo = new ComboTracker();
+
+    // HUD (replaced inline HUD text objects)
+    this.hud = new CoinPusherHUD(this);
+
     // Drop zone indicator
     this.dropIndicator = this.add.triangle(width / 2, DROP_Y - 12, 0, 0, 12, 0, 6, 8, 0xffcc00, 0.6);
     this.dropIndicator.setOrigin(0.5);
-
-    // HUD
-    this.hudCoins = this.add.text(14, 14, '', {
-      fontSize: '16px', fontFamily: 'monospace', color: '#ffcc00',
-    }).setDepth(10);
-
-    this.hudScore = this.add.text(14, 36, '', {
-      fontSize: '16px', fontFamily: 'monospace', color: '#00ff88',
-    }).setDepth(10);
-
-    this._updateHUD();
 
     // Controls hint
     const hint = this.isMobile ? 'Tap to drop a coin' : 'Click or press SPACE to drop a coin';
@@ -105,7 +114,6 @@ export class CoinPusherPlayScene extends Phaser.Scene {
       this._dropCoin(Phaser.Math.Clamp(pointer.x, TRAY_LEFT + 20, TRAY_RIGHT - 20));
     });
     this.input.keyboard.on('keydown-SPACE', () => {
-      // Drop at current pointer X or center
       const px = this.input.activePointer.x;
       const dropX = (px > TRAY_LEFT && px < TRAY_RIGHT)
         ? px
@@ -123,83 +131,44 @@ export class CoinPusherPlayScene extends Phaser.Scene {
     arcadeBtn.on('pointerdown', () => this.scene.start('ArcadeMenuScene'));
     this.input.keyboard.on('keydown-ESC', () => this.scene.start('ArcadeMenuScene'));
 
-    // Seed a few coins and prizes on the tray
+    // Seed initial coins and prizes
     this._seedTray();
   }
 
   update(time, delta) {
     if (this.gameOver) return;
     const dt = delta / 1000;
+    this.elapsed += dt;
 
     this._movePusher(dt);
     this._checkFallenObjects();
     this._spawnPrizes(delta);
+    this._checkBonusRound();
     this._updateDropIndicator();
-    this._updateHUD();
-  }
 
-  // -- Tray visuals ----------------------------------------------------------
-
-  _drawTray() {
-    const g = this.add.graphics();
-
-    // Tray floor
-    g.fillStyle(0x222244, 1);
-    g.fillRect(TRAY_LEFT, TRAY_TOP, TRAY_WIDTH, TRAY_BOTTOM - TRAY_TOP);
-
-    // Tray floor texture lines
-    g.lineStyle(1, 0x333355, 0.3);
-    for (let y = TRAY_TOP; y < TRAY_BOTTOM; y += 20) {
-      g.lineBetween(TRAY_LEFT, y, TRAY_RIGHT, y);
+    // Combo expiry check
+    if (this.combo.update(Date.now())) {
+      this.hud.hideCombo();
     }
 
-    // Side walls visual
-    g.fillStyle(0x444466, 1);
-    g.fillRect(TRAY_LEFT - 10, TRAY_TOP, 10, TRAY_BOTTOM - TRAY_TOP);
-    g.fillRect(TRAY_RIGHT, TRAY_TOP, 10, TRAY_BOTTOM - TRAY_TOP);
-
-    // Back wall visual
-    g.fillStyle(0x444466, 1);
-    g.fillRect(TRAY_LEFT - 10, TRAY_TOP - 10, TRAY_WIDTH + 20, 10);
-
-    // Win zone highlight (front edge)
-    g.fillStyle(0x00ff88, 0.08);
-    g.fillRect(TRAY_LEFT, TRAY_BOTTOM - 30, TRAY_WIDTH, 30);
-
-    // Win zone label
-    this.add.text(TRAY_LEFT + TRAY_WIDTH / 2, TRAY_BOTTOM - 15, 'WIN ZONE', {
-      fontSize: '10px', fontFamily: 'monospace', color: '#00ff88',
-    }).setOrigin(0.5).setAlpha(0.4);
-
-    // Drop zone label at top
-    this.add.text(TRAY_LEFT + TRAY_WIDTH / 2, TRAY_TOP - 20, 'DROP ZONE', {
-      fontSize: '10px', fontFamily: 'monospace', color: '#ffcc00',
-    }).setOrigin(0.5).setAlpha(0.4);
-
-    g.setDepth(-1);
+    // Update HUD
+    this.hud.update({
+      coinsLeft: this.coinsLeft,
+      score: this.score,
+      comboMultiplier: this.combo.getMultiplier(),
+      comboCount: this.combo.getCount(),
+      elapsed: this.elapsed,
+    });
   }
 
-  _createWalls() {
-    // Left wall
-    this.leftWall = this.physics.add.staticBody(TRAY_LEFT - 5, TRAY_TOP, 10, TRAY_BOTTOM - TRAY_TOP);
-    // Right wall
-    this.rightWall = this.physics.add.staticBody(TRAY_RIGHT - 5, TRAY_TOP, 10, TRAY_BOTTOM - TRAY_TOP);
-    // Back wall (top)
-    this.backWall = this.physics.add.staticBody(TRAY_LEFT, TRAY_TOP - 5, TRAY_WIDTH, 10);
-
-    // Collide coins and prizes with walls
-    this.physics.add.collider(this.coins, this.leftWall);
-    this.physics.add.collider(this.coins, this.rightWall);
-    this.physics.add.collider(this.coins, this.backWall);
-    this.physics.add.collider(this.prizes, this.leftWall);
-    this.physics.add.collider(this.prizes, this.rightWall);
-    this.physics.add.collider(this.prizes, this.backWall);
-  }
-
-  // -- Pusher ----------------------------------------------------------------
+  // -- Pusher with difficulty ramp ------------------------------------------
 
   _movePusher(dt) {
-    const y = this.pusher.y + this.pusherDirection * PUSHER_SPEED * dt;
+    // Speed ramps from min to max over PUSHER_RAMP_DURATION seconds
+    const rampT = Math.min(1, this.elapsed / PUSHER_RAMP_DURATION);
+    const speed = PUSHER_SPEED_MIN + (PUSHER_SPEED_MAX - PUSHER_SPEED_MIN) * rampT;
+
+    const y = this.pusher.y + this.pusherDirection * speed * dt;
     if (y >= PUSHER_Y_MAX) {
       this.pusher.y = PUSHER_Y_MAX;
       this.pusherDirection = -1;
@@ -210,12 +179,10 @@ export class CoinPusherPlayScene extends Phaser.Scene {
       this.pusher.y = y;
     }
 
-    // Push coins that are in front of the pusher via velocity
-    const pushVelY = this.pusherDirection * PUSHER_SPEED;
-    this.pusher.body.setVelocityY(pushVelY);
+    this.pusher.body.setVelocityY(this.pusherDirection * speed);
   }
 
-  // -- Coin drop -------------------------------------------------------------
+  // -- Coin drop with scale-in animation ------------------------------------
 
   _dropCoin(x) {
     if (this.gameOver) return;
@@ -224,6 +191,7 @@ export class CoinPusherPlayScene extends Phaser.Scene {
     if (this.coinsLeft <= 0) return;
 
     this.coinsLeft--;
+    this.coinsDropped++;
     this.lastDrop = now;
 
     const coin = this.physics.add.sprite(x, DROP_Y, 'coin');
@@ -235,23 +203,36 @@ export class CoinPusherPlayScene extends Phaser.Scene {
     coin.body.setMaxVelocity(300, 300);
     coin._type = 'coin';
 
-    // Slight random horizontal nudge
+    // Scale-in animation
+    coin.setScale(0);
+    this.tweens.add({
+      targets: coin,
+      scaleX: 1, scaleY: 1,
+      duration: 150,
+      ease: 'Back.easeOut',
+    });
+
+    // Landing flash after a brief delay
+    this.time.delayedCall(400, () => {
+      if (coin.active) {
+        emitCoinLanding(this, coin.x, coin.y);
+      }
+    });
+
     coin.body.setVelocityX(Phaser.Math.FloatBetween(-15, 15));
     coin.body.setVelocityY(60);
   }
 
-  // -- Check for objects falling off the front or sides ----------------------
+  // -- Check for objects falling off ----------------------------------------
 
   _checkFallenObjects() {
     const checkGroup = (group) => {
       group.getChildren().forEach((obj) => {
-        // Fell off the front (bottom) = win
         if (obj.y > WIN_ZONE_Y) {
           this._scoreObject(obj);
           obj.destroy();
           return;
         }
-        // Fell off sides = lost (shouldn't happen with walls, but safety)
         if (obj.x < TRAY_LEFT - 20 || obj.x > TRAY_RIGHT + 20) {
           obj.destroy();
         }
@@ -260,42 +241,43 @@ export class CoinPusherPlayScene extends Phaser.Scene {
     checkGroup(this.coins);
     checkGroup(this.prizes);
 
-    // Check game over
     if (this.coinsLeft <= 0 && this.coins.getLength() === 0 && !this.gameOver) {
       this._endGame();
     }
   }
 
-  _scoreObject(obj) {
-    let points = 0;
-    let color = '#ffcc00';
-    if (obj._type === 'coin') {
-      points = COIN_VALUE;
-      color = '#ffcc00';
-    } else if (obj._type === 'gem') {
-      points = GEM_VALUE;
-      color = '#00ff88';
-    } else if (obj._type === 'token') {
-      points = TOKEN_VALUE;
-      color = '#ff44ff';
-    }
-    this.score += points;
+  // -- Scoring with combo system and effects --------------------------------
 
-    // Floating score text
-    const label = `+${points}`;
-    const floatText = this.add.text(obj.x, WIN_ZONE_Y - 10, label, {
-      fontSize: '16px', fontFamily: 'monospace', color, fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(10);
-    this.tweens.add({
-      targets: floatText,
-      y: WIN_ZONE_Y - 40,
-      alpha: 0,
-      duration: 600,
-      onComplete: () => floatText.destroy(),
-    });
+  _scoreObject(obj) {
+    const comboResult = this.combo.recordScore();
+    const multiplier = comboResult.multiplier;
+
+    if (obj._type === 'coin') {
+      const points = Math.round(1 * multiplier);
+      this.score += points;
+      emitCoinScore(this, obj.x, WIN_ZONE_Y - 10, points, '#ffcc00');
+      if (multiplier > 1) {
+        cameraShake(this, 0.004);
+      }
+    } else {
+      // Prize object — look up config
+      const config = getPrizeConfig(obj._type);
+      if (config) {
+        const points = Math.round(config.points * multiplier);
+        this.score += points;
+        this.prizesCollected++;
+        emitPrizeScore(this, obj.x, WIN_ZONE_Y - 10, points, config.color);
+        cameraShake(this, 0.01);
+      }
+    }
+
+    // Show combo HUD if active
+    if (comboResult.isCombo) {
+      this.hud.showCombo(comboResult.multiplier);
+    }
   }
 
-  // -- Prize spawning --------------------------------------------------------
+  // -- Prize spawning using weighted PRIZE_CONFIG ---------------------------
 
   _spawnPrizes(delta) {
     this.prizeTimer += delta;
@@ -304,22 +286,34 @@ export class CoinPusherPlayScene extends Phaser.Scene {
 
     if (this.prizes.getLength() >= MAX_PRIZES) return;
 
-    const isToken = Math.random() < 0.3;
-    const texKey = isToken ? 'special_token' : 'gem';
-    const type = isToken ? 'token' : 'gem';
+    this._spawnOnePrize();
+  }
+
+  _spawnOnePrize() {
+    const prizeKey = rollPrize();
+    const config = getPrizeConfig(prizeKey);
 
     const x = Phaser.Math.Between(TRAY_LEFT + 30, TRAY_RIGHT - 30);
     const y = DROP_Y;
 
-    const prize = this.physics.add.sprite(x, y, texKey);
+    const prize = this.physics.add.sprite(x, y, config.texture);
     this.prizes.add(prize);
-    prize.body.setCircle(8, (prize.width / 2) - 8, (prize.height / 2) - 8);
+    prize.body.setCircle(config.radius, (prize.width / 2) - config.radius, (prize.height / 2) - config.radius);
     prize.body.setBounce(COIN_BOUNCE);
     prize.body.setDrag(COIN_DRAG);
     prize.body.setGravityY(COIN_GRAVITY);
     prize.body.setMaxVelocity(300, 300);
-    prize._type = type;
+    prize._type = prizeKey;
     prize.body.setVelocityY(40);
+
+    // Scale-in
+    prize.setScale(0);
+    this.tweens.add({
+      targets: prize,
+      scaleX: 1, scaleY: 1,
+      duration: 200,
+      ease: 'Back.easeOut',
+    });
 
     // Gentle glow tween
     this.tweens.add({
@@ -331,10 +325,35 @@ export class CoinPusherPlayScene extends Phaser.Scene {
     });
   }
 
-  // -- Seed initial tray state -----------------------------------------------
+  // -- Bonus round every 30s -----------------------------------------------
+
+  _checkBonusRound() {
+    if (this.elapsed - this.lastBonusTime >= BONUS_INTERVAL) {
+      this.lastBonusTime = this.elapsed;
+
+      // Skip on first frame
+      if (this.elapsed < 1) return;
+
+      this.hud.showBonusRound();
+
+      // Spawn 3 rapid prizes with sparkle effects
+      for (let i = 0; i < BONUS_PRIZE_COUNT; i++) {
+        this.time.delayedCall(i * 300, () => {
+          if (this.gameOver) return;
+          this._spawnOnePrize();
+
+          // Sparkle at random tray positions
+          const sx = Phaser.Math.Between(TRAY_LEFT + 40, TRAY_RIGHT - 40);
+          const sy = Phaser.Math.Between(TRAY_TOP + 40, TRAY_BOTTOM - 40);
+          emitSparkle(this, sx, sy, 0xffdd00);
+        });
+      }
+    }
+  }
+
+  // -- Seed initial tray state ----------------------------------------------
 
   _seedTray() {
-    // Place some coins in the middle zone
     for (let i = 0; i < 12; i++) {
       const x = Phaser.Math.Between(TRAY_LEFT + 30, TRAY_RIGHT - 30);
       const y = Phaser.Math.Between(PUSHER_Y_MAX + 20, TRAY_BOTTOM - 60);
@@ -348,20 +367,20 @@ export class CoinPusherPlayScene extends Phaser.Scene {
       coin._type = 'coin';
     }
 
-    // A couple prizes
+    // Seed 2 prizes using the weighted system
     for (let i = 0; i < 2; i++) {
-      const isToken = i === 1;
-      const texKey = isToken ? 'special_token' : 'gem';
+      const prizeKey = rollPrize();
+      const config = getPrizeConfig(prizeKey);
       const x = Phaser.Math.Between(TRAY_LEFT + 60, TRAY_RIGHT - 60);
       const y = Phaser.Math.Between(PUSHER_Y_MAX + 40, TRAY_BOTTOM - 80);
-      const prize = this.physics.add.sprite(x, y, texKey);
+      const prize = this.physics.add.sprite(x, y, config.texture);
       this.prizes.add(prize);
-      prize.body.setCircle(8, (prize.width / 2) - 8, (prize.height / 2) - 8);
+      prize.body.setCircle(config.radius, (prize.width / 2) - config.radius, (prize.height / 2) - config.radius);
       prize.body.setBounce(COIN_BOUNCE);
       prize.body.setDrag(COIN_DRAG);
       prize.body.setGravityY(COIN_GRAVITY);
       prize.body.setMaxVelocity(300, 300);
-      prize._type = isToken ? 'token' : 'gem';
+      prize._type = prizeKey;
 
       this.tweens.add({
         targets: prize,
@@ -373,31 +392,19 @@ export class CoinPusherPlayScene extends Phaser.Scene {
     }
   }
 
-  // -- Drop indicator --------------------------------------------------------
+  // -- Drop indicator -------------------------------------------------------
 
   _updateDropIndicator() {
     const px = this.input.activePointer.x;
-    const clampedX = Phaser.Math.Clamp(px, TRAY_LEFT + 20, TRAY_RIGHT - 20);
-    this.dropIndicator.x = clampedX;
+    this.dropIndicator.x = Phaser.Math.Clamp(px, TRAY_LEFT + 20, TRAY_RIGHT - 20);
   }
 
-  // -- HUD -------------------------------------------------------------------
-
-  _updateHUD() {
-    this.hudCoins.setText(`COINS: ${this.coinsLeft}`);
-    this.hudScore.setText(`SCORE: ${this.score}`);
-
-    // Flash coins red when low
-    this.hudCoins.setColor(this.coinsLeft <= 5 ? '#ff4444' : '#ffcc00');
-  }
-
-  // -- Game over -------------------------------------------------------------
+  // -- Game over with expanded stats ----------------------------------------
 
   _endGame() {
     if (this.gameOver) return;
     this.gameOver = true;
 
-    // Save high score
     const prevBest = parseInt(localStorage.getItem('coinPusherBest') || '0', 10);
     const isNewBest = this.score > prevBest;
     if (isNewBest) {
@@ -409,6 +416,12 @@ export class CoinPusherPlayScene extends Phaser.Scene {
         score: this.score,
         best: Math.max(this.score, prevBest),
         isNewBest,
+        stats: {
+          coinsDropped: this.coinsDropped,
+          prizesCollected: this.prizesCollected,
+          maxCombo: this.combo.getMaxCombo(),
+          timePlayed: this.elapsed,
+        },
       });
     });
   }
